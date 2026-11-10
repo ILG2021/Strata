@@ -245,12 +245,12 @@ LLAMA_CPP_ZIP = f"https://github.com/ggml-org/llama.cpp/archive/{LLAMA_CPP_COMMI
 # "https://github.com/<you>/Strata/releases/latest/download/" (or pass --prebuilt / set STRATA_PREBUILT_URL).
 # With the default, the release of this checkout's own version (PREBUILT_TAG_URL, CMakeLists.txt's version) is
 # tried first and the latest release is the fallback (#214): an older checkout keeps the engine it shipped with.
-PREBUILT_URL = "https://github.com/Niko1221/Strata/releases/latest/download/"
+PREBUILT_URL = "https://github.com/ILG2021/Strata/releases/latest/download/"
 # The repository the release assets and their SHA-256 come from; `engine_digest` reads the API here even
 # when --prebuilt points the download somewhere else, because the hash is only worth having if it comes
 # from somewhere the download does not.
-REPO = "Niko1221/Strata"
-PREBUILT_TAG_URL = "https://github.com/Niko1221/Strata/releases/download/v{version}/"
+REPO = "ILG2021/Strata"
+PREBUILT_TAG_URL = "https://github.com/ILG2021/Strata/releases/download/v{version}/"
 PREBUILT_ASSET = "strata-windows-x64.zip" if WIN else "strata-linux-x64.zip"
 # the CUDA libraries the ready-made engine loads (the same CUDA 13.0 it is built with), from NVIDIA's pip packages
 CUDA_WHEELS = ["nvidia-cublas==13.0.2.14", "nvidia-cuda-runtime==13.0.96"]
@@ -749,6 +749,13 @@ MMPROJ = "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
 # packs): OWN_PATH_FAMILIES, offered in the same menu and installed by install_own_path.  NVIDIA (CUDA) and AMD (HIP)
 # only: the Intel Arc (SYCL) engine refuses it.
 QWEN36_FILES = {
+    # UD-IQ3_S: the download, and the file the engine runs (its MTP block's Q2_K / Q4_K experts as Q8_0,
+    # tools/q36_mtp_requant.py; the conversion is deterministic, so every PC makes this same file)
+    "Qwen3.6-35B-A3B-UD-IQ3_S.gguf": (15346432288, "ab639a7f330f96c47d3e6c2dd2d6445182e7b763e17e6048dc850a71bbc9f27f"),
+    "Qwen3.6-35B-A3B-UD-IQ3_S-strata.gguf": (15874914752, "dc3f829f974e3063cfef851b0fe5ffa3785987ad9d0d6f8567042c5344ebf07b"),
+    # ... then its MTP block as Q4_K / Q5_K (q36_mtp_requant.py --recompact): 475 MiB instead of 816, small enough for the prompt
+    # staging beside a 128K 8-bit cache on an 8 GB card (measured: RTX 4060 Laptop, 1.25 GiB left, 0.91 GiB of staging)
+    "Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf": (15505816160, "58bf55d6055d66e71a9e7a9d976fac386659a670f89b401e7d355f824924f7b0"),
     "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf": (22853663008, "55983c5a75a1ab969824077b3bb3de4146e82a9234072b48ad4e8f92ad3fe9f1"),
     "Qwen3.6-35B-A3B-UD-Q6_K_XL.gguf": (32611711264, "35fce994cd36104a7dc1bd8a4bdf13778145664c00fdef6773aebc9246e5019c"),
     "Qwen3.6-35B-A3B-Q8_0.gguf": (37801097504, "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131"),
@@ -764,9 +771,15 @@ OWN_PATH_FAMILIES = {
                # RAM: the engine keeps a copy of every expert in RAM when they do not all fit in VRAM (the hybrid mode),
                # so the file's size plus room for the OS and the rest (measured: UD-Q4_K_XL on a 46 GB PC with a 12 GB
                # card, 18.75 GiB of experts pinned)
-               "models": {"UD-Q4_K_XL": {"about": "4-bit (Unsloth Dynamic), the smallest", "ram_gb": 32},
+               # UD-IQ3_S: "converted" names the file made from the download after its SHA-256 check (the engine has no
+               # kernels for its MTP block's experts); measured: an 8 GB RTX 4060 Laptop with 32 GB of RAM, 19.6 GB in use
+               "models": {"UD-Q4_K_XL": {"about": "4-bit (Unsloth Dynamic)", "ram_gb": 32},
                           "UD-Q6_K_XL": {"about": "6-bit (Unsloth Dynamic), closer to the full model", "ram_gb": 44},
-                          "Q8_0": {"about": "8-bit, the closest to the full model", "ram_gb": 52}},
+                          "Q8_0": {"about": "8-bit, the closest to the full model", "ram_gb": 52},
+                          # last, so it is never the default where the other sizes were (the first size is the fallback)
+                          "UD-IQ3_S": {"about": "3-bit (Unsloth Dynamic), the smallest; for 8 GB cards and 32 GB of RAM",
+                                       "ram_gb": 24, "converted": "Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf",
+                                       "via": "Qwen3.6-35B-A3B-UD-IQ3_S-strata.gguf"}},
                "sha256": QWEN36_FILES,
                # the engine's KV cache per context token: 10 attention layers + the MTP block, 2 KV heads x 256, K and
                # V in fp32 (strata-q36)
@@ -6954,7 +6967,7 @@ def write_config(path: Path, cfg: dict):
 SETUP_KEYS = frozenset({"exe", "args", "cwd", "tokenizer", "model_name", "log", "lib_dirs", "port", "backend", "env",
                         "gpu", "gpus_asked", "gpus_by", "layer_split", "host", "api_key", "draft_vocab", "vision", "args_written"})
 SETUP_ENV = frozenset({"STRATA_HIPBLASLT_TUNING", "STRATA_ROCBLAS_TUNING", "STRATA_RESIDENT_PIN", "STRATA_NO_ARENA_THP", "STRATA_MMQ_KQ", "STRATA_HC_Q8",
-                       "STRATA_ROUTE_TAIL_SKIP"}) | frozenset(GFX1103_SWITCHES) | frozenset(GFX1150_SWITCHES)   # the "env" entries setup writes (the gfx1103 switches are setup's too: a re-run refreshes them, they do not linger)
+                       "STRATA_ROUTE_TAIL_SKIP", "STRATA_Q36_RELEASE_FILE_PAGES"}) | frozenset(GFX1103_SWITCHES) | frozenset(GFX1150_SWITCHES)   # the "env" entries setup writes (the gfx1103 switches are setup's too: a re-run refreshes them, they do not linger)
 # 0.1.44 added these three, written for Unsloth's files only (unsloth_default_env).  In any other model's config they are the
 # user's own (STRATA_ROUTE_TAIL_SKIP=0 to turn the tail skip off, STRATA_MMQ_KQ=1 ...): a setup run again keeps them there
 # (0.1.44 dropped them with the rest of SETUP_ENV).
@@ -8528,8 +8541,23 @@ def own_path_context(fam: dict, vram_gb: float) -> int:
     return 131072                                      # 128K on every card (owner, 2026-11-01)
 
 
-def own_path_size(fam: dict, ram: float) -> str:
-    """The recommended size: the largest file whose RAM need this PC has (the smallest when none fits)."""
+#: Qwen3.6 on a card of at most this much VRAM (the 8 GB laptop and desktop cards) gets the 8 GB settings by default: UD-IQ3_S, the 8-bit
+#: KV cache, conversation checkpoints and the model file's pages released after loading.  Measured: RTX 4060 Laptop (8 GB), 32 GB of RAM,
+#: 128K: 1.25 GiB of VRAM left; 26-31 tok/s; an agent's next turn read in 0.3-2 s instead of 12-20 s (docs/QWEN36.md).
+QWEN36_SMALL_CARD_GB = 8.5
+QWEN36_SMALL_SIZE = "UD-IQ3_S"
+
+
+def qwen36_small_card(fam: dict, vram_gb: float) -> bool:
+    """A card the 8 GB settings are for (an own-path family that has the small size)."""
+    return 0 < float(vram_gb or 0) <= QWEN36_SMALL_CARD_GB and QWEN36_SMALL_SIZE in fam.get("models", {})
+
+
+def own_path_size(fam: dict, ram: float, vram_gb: float = 0.0) -> str:
+    """The recommended size: UD-IQ3_S on an 8 GB card when the RAM holds it, else the largest file whose RAM need this
+    PC has (the smallest when none fits)."""
+    if qwen36_small_card(fam, vram_gb) and ram >= fam["models"][QWEN36_SMALL_SIZE]["ram_gb"]:
+        return QWEN36_SMALL_SIZE
     fits = [m for m, d in fam["models"].items() if ram >= d["ram_gb"]]
     return max(fits, key=lambda m: fam["sha256"][fam["file"].format(q=m)][0]) if fits else next(iter(fam["models"]))
 
@@ -8661,9 +8689,12 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         from strata_control import fit_label
         fit = f"   <- {fit_label.label(size / 1e9, ram, low_ram_vram(gpu))}"        # the file against the RAM and the card's memory together
         say(f"  {i}) {m:10s} {d['about']}; download {size / 1e9:.1f} GB{fit}")
-    rec = own_path_size(fam, ram)
+    small = qwen36_small_card(fam, gpu.get("vram_gb", 0.0))
+    rec = own_path_size(fam, ram, gpu.get("vram_gb", 0.0))
     if not a.model:
-        say(f"  Recommended for {ram:.0f} GB of RAM: {rec} (the largest that fits; any size can be chosen)")
+        say(f"  Recommended for this {gpu.get('vram_gb', 0.0):.0f} GB card: {rec} (with the 8-bit memory; any size can be chosen)"
+            if small and rec == QWEN36_SMALL_SIZE else
+            f"  Recommended for {ram:.0f} GB of RAM: {rec} (the largest that fits; any size can be chosen)")
     model = a.model or names[int(ask("Which size?", [str(i) for i in range(1, len(names) + 1)],
                                      str(names.index(rec) + 1), a.yes)) - 1]
     if ram < fam["models"][model]["ram_gb"]:
@@ -8704,16 +8735,36 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
             n = int(ask("How many requests at once (1 = one at a time)?", [str(i) for i in range(1, PARALLEL_MAX + 1)],
                         "1", a.yes))
             par = n if n > 1 else None
-    if a.rope_scaling or a.rope_scale or a.kv or a.resident_budget_gib is not None or a.low_ram not in (None, "auto"):
-        warn(f"--rope-scaling / --kv / --resident-budget-gib / --low-ram are Flash-Next settings: {fam['title']} "
-             "does not use them")
+    # the engine path's 8-bit K / V caches (--kv q8), 3.6x smaller than fp32: asked for with --kv int8, and the default on an 8 GB card
+    # (where 128K in fp32 does not fit); any other --kv there keeps fp32
+    kv8 = a.kv == "int8" or (a.kv is None and small)
+    if a.rope_scaling or a.rope_scale or (a.kv and not kv8) or a.resident_budget_gib is not None or a.low_ram not in (None, "auto"):
+        warn(f"--rope-scaling / --kv {a.kv or ''} / --resident-budget-gib / --low-ram are Flash-Next settings: {fam['title']} "
+             "does not use them" + (" (its memory takes --kv int8; without it the memory stays fp32)" if a.kv and not kv8 else ""))
+    if kv8:
+        ok("conversation memory: 8-bit (--kv int8), about a quarter of the fp32 default"
+           + (" - the default on an 8 GB card" if a.kv is None else ""))
     folder = Path(a.gguf_dir) if a.gguf_dir else Path(a.models_dir) / tag
     gguf = folder / fam["file"].format(q=model)
     size = fam["sha256"][gguf.name][0]
     part = gguf.with_name(gguf.name + ".part")
+    conv = fam["models"][model].get("converted")     # UD-IQ3_S: the engine runs a file made from the download
+    ready = folder / conv if conv else gguf
+    via = fam["models"][model].get("via")             # ... in two pinned steps: the download -> `via` (Q8_0 MTP block) -> `converted`
+    mid = folder / via if via else None
     def have(p: Path) -> bool:                         # --gguf-dir: the person's own file has no finish mark; verify_sha256 checks and writes it
         return p.exists() and (done(p) or bool(a.gguf_dir))
-    left = 0 if have(gguf) else (size - (part.stat().st_size if part.is_file() else 0)) / 1e9
+    if conv and ready.exists():                      # made earlier (its finish mark may be missing: its SHA-256 is checked below)
+        left = 0
+    elif mid is not None and mid.exists():             # the first step's file: only the second step is left
+        left = fam["sha256"][conv][0] / 1e9
+    else:
+        left = 0 if have(gguf) else (size - (part.stat().st_size if part.is_file() else 0)) / 1e9   # still to download
+        if conv:                                       # the converted copy is written beside the download, which is removed after
+            out_gb = fam["sha256"][conv][0] / 1e9
+            # two steps: the rest of the download + the first file; then, the download removed, the last file beside the
+            # first: whichever needs more
+            left = left + out_gb if mid is None else                 max(left + fam["sha256"][via][0] / 1e9, fam["sha256"][via][0] / 1e9 + out_gb - size / 1e9)
     if left and free_gb(folder) < left:
         fail(f"not enough free disk space in {folder}: need ~{left:.0f} GB, {free_gb(folder):.0f} GB free", ("use --data-dir on a bigger drive (strata launch --data-dir)" if CONTROL else "use --models-dir on a bigger drive"))
     if left and free_gb(folder) < left + 1:
@@ -8740,13 +8791,43 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     ok("engine: the engine component (looked up when the model loads)" if CONTROL else f"engine: {eng / EXE}")
 
     step(5, f"downloading {fam['title']} {model}")
-    if have(gguf):
-        ok(f"{gguf.name} already downloaded")
+    requant = [sys.executable, str(ROOT / "tools" / "q36_mtp_requant.py")]
+
+    def drop(p: Path, why: str) -> None:              # a file the next step no longer needs (never the person's own, --gguf-dir)
+        if p.exists() and not a.gguf_dir:
+            p.unlink()
+            p.with_name(p.name + ".done").unlink(missing_ok=True)
+            say(f"  {p.name} removed ({why})")
+
+    if conv and ready.exists():
+        ok(f"{ready.name} already prepared" if have(ready) else f"{ready.name} found: checking its SHA-256 (a minute or two)")
     else:
-        if a.gguf_dir:
-            fail(f"{gguf} is missing", f"put {gguf.name} in {folder}, or drop --gguf-dir to download it")
-        download(fam["hf"] + gguf.name, gguf)
-    verify_sha256(gguf, *fam["sha256"][gguf.name], own=bool(a.gguf_dir))
+        if mid is not None and mid.exists():
+            ok(f"{mid.name} found: checking it, then its MTP block is made compact")
+        else:
+            if have(gguf):
+                ok(f"{gguf.name} already downloaded")
+            else:
+                if a.gguf_dir:
+                    fail(f"{gguf} is missing", f"put {gguf.name} in {folder}, or drop --gguf-dir to download it")
+                download(fam["hf"] + gguf.name, gguf)
+            verify_sha256(gguf, *fam["sha256"][gguf.name], own=bool(a.gguf_dir))
+            if conv:
+                first = mid or ready
+                say(f"  Converting the file's MTP block for this engine (a few minutes, about "
+                    f"{fam['sha256'][first.name][0] / 1e9:.1f} GB written)")
+                run(requant + [str(gguf), str(first), "--force", "--mtp-format", "q8_0" if mid else "compact"])
+        if mid is not None:                            # the second step: the Q8_0 MTP block as Q4_K / Q5_K
+            verify_sha256(mid, *fam["sha256"][mid.name])
+            drop(gguf, f"the converted {mid.name} checks out")
+            say(f"  Making the MTP block compact (a few minutes, about {fam['sha256'][conv][0] / 1e9:.1f} GB written)")
+            run(requant + [str(mid), str(ready), "--force", "--recompact"])
+    if conv:
+        verify_sha256(ready, *fam["sha256"][conv])
+        drop(gguf, f"the converted {ready.name} is what the engine runs")
+        if mid is not None:
+            drop(mid, f"the compact {ready.name} is what the engine runs")
+        gguf = ready
     ok(f"model file: {gguf}")
     mmproj = folder / fam["mmproj"]
     if vision != "none":                               # the image encoder: Unsloth's mmproj, pinned, size + SHA-256 checked
@@ -8773,6 +8854,10 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
 
     step(7, "writing the start script")
     args = ["--native", str(gguf), "--max-context", str(ctx), "--prefill", "auto", "--mtp", str(fam["mtp"])]
+    if kv8:
+        args += ["--kv", "q8"]
+    if small:                                          # an agent's next turn resumes from a checkpoint instead of reading its whole prompt
+        args += ["--prompt-cache", "3"]
     if a.vram_reserve_mib is not None:             # VRAM left free for other programs: the experts take that much less
         vram = gpu.get("vram_gb", 0.0)
         if vram > 0:
@@ -8785,6 +8870,9 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         cfg["cuda"] = 12
     if hip:
         cfg["backend"] = "hip"
+    if small:                                          # the model file's pages read while loading leave the engine's working set
+        cfg["env"] = {**(cfg.get("env") or {}), "STRATA_Q36_RELEASE_FILE_PAGES": "1"}
+        ok("8 GB card: conversation checkpoints on (--prompt-cache 3), the model file's loaded pages given back to Windows")
     if gpu.get("count", 1) > 1 or a.gpu is not None:
         cfg["gpu"] = gpu["index"]
         cfg["gpus_asked"] = True

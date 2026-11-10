@@ -1271,6 +1271,21 @@ class Strata:
             except Exception:                           # noqa: BLE001
                 return False
         notes = []
+        # An 8 GB NVIDIA card: Qwen3.6-35B-A3B UD-IQ3_S with setup's 8 GB settings (8-bit cache, 128K, checkpoints), where its RAM
+        # holds the experts (setup.QWEN36_SMALL_CARD_GB, OWN_PATH_FAMILIES).  The Flash-Next tiers below run mostly on the CPU there.
+        q36 = (getattr(S, "OWN_PATH_FAMILIES", None) or {}).get("qwen36") if S else None
+        small = getattr(S, "QWEN36_SMALL_SIZE", None)
+        if (q36 and small and best.get("vendor", "nvidia") == "nvidia" and not best.get("uma")
+                and S.qwen36_small_card(q36, vram) and ram >= q36["models"][small]["ram_gb"]):
+            size = self.own_size("qwen36", small)
+            return {"family": "qwen36", "model": small, "title": q36["title"] + " " + small, "context": 131072, "backend": "cuda",
+                    "gpu": {k: best.get(k) for k in ("index", "name", "vram_gb")}, "download_gb": size["download_gb"],
+                    "why": (f"a {vram:.0f} GB card with {ram:.0f} GB of RAM: {q36['title']} {small} with the 8-bit memory, 128K, and "
+                            "conversation checkpoints for agents (measured on an RTX 4060 Laptop: 26-31 tok/s)"),
+                    "notes": ["the experts run on the CPU on this card (it has room for the shared weights and the 128K memory only), "
+                              "so the CPU is busy and the GPU about half loaded while it answers: that is expected"],
+                    "setup_command": ("START-HERE.bat --setup" if WIN else "./setup.sh --setup")
+                    + f" --yes --family qwen36 --model {small} --context 131072"}
         # 0.2.0, the owner's memory tiers (README "The other sizes"; setup.py MEMORY_TIERS holds the same floors): RAM + VRAM
         # together.  An APU's shared memory is the RAM itself, so only its BIOS carve-out counts as VRAM.
         tvram = float(best.get("dedicated_gb", 0.0)) if best.get("uma") else float(vram)

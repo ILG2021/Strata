@@ -253,13 +253,28 @@ def read_config(path: Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
 
+def installed_kv(desc: dict, family: str | None) -> str | None:
+    """The memory format an installed config runs, in launch's words.  The Qwen3.6 engine path calls its 8-bit cache
+    "q8" (setup writes `--kv q8` for `--kv int8`), and without a --kv it keeps fp32: neither is what the format words
+    of the other families mean, so a 128K start that asked for int8 found a config without it "already installed" and
+    ran out of VRAM, and a config with it looked different and was rewritten without it."""
+    kv = desc.get("kv")
+    kv = {"q8": "int8", "q8_0": "int8"}.get(kv, kv)
+    return "fp32" if kv is None and family == "qwen36" else kv
+
+
 def desc_matches(desc: dict, s: S.LaunchSettings) -> bool:
     """Does the installed model's config already carry the context, memory format and picture choice of these settings?
     (The graphics cards are not part of it: they go into each launch's own config, see apply_cards.)"""
     if s.context and desc.get("context") != s.context:
         return False
     want_kv = s.kv or ("int8" if (s.context or 32768) > 8192 else "fp16")
-    if desc.get("kv") not in (None, want_kv) and (s.context or 32768) > 8192:
+    have_kv = installed_kv(desc, s.family)
+    if s.family == "qwen36":
+        # int8 is opt-in on this path: an explicit --kv int8 needs it, no --kv keeps what is installed
+        if s.kv and (s.kv == "int8") != (have_kv == "int8"):
+            return False
+    elif have_kv not in (None, want_kv) and (s.context or 32768) > 8192:
         return False
     images = desc.get("images") or "off"
     if s.vision is None:
@@ -994,8 +1009,16 @@ class Runner:
         if ctx:
             args += ["--context", str(ctx)]
         args += ["--vision", self.vision_word()]
-        if s.kv:
-            args += ["--kv", s.kv]
+        kv = s.kv
+        if not kv and s.family == "qwen36":   # setup writes the 8-bit cache only when asked: a new context keeps an installed one
+            try:
+                _path, desc = self.installed_state()
+            except Exception:                                # noqa: BLE001 - no installed config to keep a choice from
+                desc = None
+            if desc and installed_kv(desc, "qwen36") == "int8":
+                kv = "int8"
+        if kv:
+            args += ["--kv", kv]
         if fam in ("qwen", "coder"):
             args += ["--experimental-speed-projection", "off"]
         resolved = self.resolved_drafting(fam)

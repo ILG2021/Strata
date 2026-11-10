@@ -123,10 +123,11 @@ Prefer the terminal? Install Strata, then run **`strata launch`**.
 curl -fsSL https://github.com/Niko1221/Strata/releases/latest/download/install.sh -o install.sh && sh install.sh
 ```
 
-**Windows PowerShell**
+**Windows PowerShell** (this fork, ILG2021: NVIDIA cards; on an 8 GB card `strata launch` sets up Qwen3.6 UD-IQ3_S with
+the 8-bit memory, 128K and conversation checkpoints, see [QWEN36.md](docs/QWEN36.md#8-gb-cards-what-you-get-by-default-02132))
 
 ```powershell
-irm https://github.com/Niko1221/Strata/releases/latest/download/install.ps1 | iex
+irm https://github.com/ILG2021/Strata/releases/latest/download/install.ps1 | iex
 ```
 
 On Windows, open a new terminal afterwards. Then:

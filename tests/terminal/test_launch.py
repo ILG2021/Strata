@@ -336,6 +336,29 @@ class RunConfig(unittest.TestCase):
         self.assertFalse(desc_matches({**d, "images": "cpu"}, S.LaunchSettings(context=32768, vision="off")))
         self.assertFalse(desc_matches(d, S.LaunchSettings(context=32768, kv="q4_0")))
 
+    def test_qwen36_memory_format_matching(self):
+        """The Qwen3.6 path writes `--kv q8` for int8 and runs fp32 without a --kv."""
+        fp32 = {"context": 131072, "kv": None, "images": "off"}
+        q8 = {**fp32, "kv": "q8"}
+        ask = lambda **kw: S.LaunchSettings(family="qwen36", context=131072, **kw)   # noqa: E731
+        self.assertFalse(desc_matches(fp32, ask(kv="int8")))     # asked for int8, installed fp32: set up again
+        self.assertTrue(desc_matches(q8, ask(kv="int8")))
+        self.assertTrue(desc_matches(q8, ask()))                 # no --kv: the installed 8-bit cache stays
+        self.assertTrue(desc_matches(fp32, ask()))
+        self.assertTrue(desc_matches(fp32, ask(kv="fp16")))      # not this path's word: setup only warns, no rerun for it
+        self.assertFalse(desc_matches(q8, ask(kv="fp16")))       # ... but it does not keep an 8-bit cache
+
+    def test_an_8gb_card_is_recommended_qwen36_iq3_s_and_lists_it(self):
+        hw8 = {**HW_12, "ram_gb": 32.0, "gpus": [{"index": 0, "name": "NVIDIA GeForce RTX 4060 Laptop GPU", "vram_gb": 8.0,
+                                                  "usable": True, "vendor": "nvidia"}]}
+        with Home():
+            cat = catalog(hw8)
+            rec = cat.recommendation(hw8)
+            self.assertEqual((rec["family"], rec["model"], rec["context"]), ("qwen36", "UD-IQ3_S", 131072))
+            rows = [r for r in cat.rows(hw8) if r.family == "qwen36"]
+            self.assertTrue(any(r.model == "UD-IQ3_S" and r.recommended for r in rows))
+            self.assertFalse([r for r in catalog(HW_12).rows(HW_12) if r.family == "qwen36"])   # a 12 GB card: as before
+
     def test_tune_words(self):
         self.assertEqual(tune_words({"outcome": "improved", "gain_pct": 4.2})[0], "faster")
         self.assertEqual(tune_words({"outcome": "default_confirmed"})[0], "already fastest")

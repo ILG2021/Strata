@@ -429,6 +429,20 @@ public:
     }
     const uint8_t* tensor_data(const TensorInfo& t) const { return base_ + data_start_ + t.offset; }
 
+    /// Takes the mapped file's pages out of this process's working set, for a loader that has copied what it needs.
+    /// The mapping stays valid: a later read faults the page back in (from the file cache, else the disk).  Best effort.
+    void release_resident() const {
+        if (!base_) return;
+#ifdef _WIN32
+        // on pages that are not locked VirtualUnlock removes them from the working set (and returns FALSE with
+        // ERROR_NOT_LOCKED, which is expected here)
+        (void) VirtualUnlock((LPVOID) base_, (SIZE_T) size_);
+        SetLastError(0);
+#else
+        (void) madvise((void*) base_, size_, MADV_DONTNEED);
+#endif
+    }
+
 private:
     void open() {
 #ifdef _WIN32
@@ -582,6 +596,10 @@ public:
 
     size_t size() const { return shards_.size(); }
     const GgufFile& shard(size_t i) const { return *shards_[i]; }
+    /// GgufFile::release_resident on every shard.
+    void release_resident() const {
+        for (const auto& s : shards_) s->release_resident();
+    }
     /// The metadata shard: general.architecture and the model's keys.
     const GgufFile& meta() const { return *shards_[0]; }
     /// The tensor named `name` (its shard index in `*shard`), or nullptr.

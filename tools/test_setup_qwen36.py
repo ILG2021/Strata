@@ -53,12 +53,16 @@ class Qwen36Entries(unittest.TestCase):
             self.assertRegex(fam[key], SHA)
             self.assertIn(REPO, fam[key])
         self.assertEqual(fam["arch"], "qwen35moe")
-        self.assertEqual(list(fam["models"]), ["UD-Q4_K_XL", "UD-Q6_K_XL", "Q8_0"])
+        self.assertEqual(list(fam["models"]), ["UD-Q4_K_XL", "UD-Q6_K_XL", "Q8_0", "UD-IQ3_S"])
         for m in fam["models"]:
             size, sha = fam["sha256"][fam["file"].format(q=m)]
-            self.assertGreater(size, 20e9)
+            self.assertGreater(size, 15e9)
             self.assertRegex(sha, r"^[0-9a-f]{64}$")
+            conv = fam["models"][m].get("converted")
+            if conv:                                   # the file made from the download is pinned too
+                self.assertRegex(fam["sha256"][conv][1], r"^[0-9a-f]{64}$")
         self.assertEqual(fam["sha256"]["Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"][0], 22853663008)
+        self.assertEqual(fam["sha256"]["Qwen3.6-35B-A3B-UD-IQ3_S.gguf"][0], 15346432288)
 
     def test_not_a_pack_family(self):
         # FAMILIES are Flash-Next files with packs; Qwen3.6 is installed by install_own_path
@@ -68,10 +72,15 @@ class Qwen36Entries(unittest.TestCase):
 
     def test_size_recommendation(self):
         fam = setup.OWN_PATH_FAMILIES["qwen36"]
-        self.assertEqual(setup.own_path_size(fam, 24.0), "UD-Q4_K_XL")   # none fits: the smallest
+        self.assertEqual(setup.own_path_size(fam, 16.0), "UD-Q4_K_XL")   # none fits: the first size, as before
+        self.assertEqual(setup.own_path_size(fam, 24.0), "UD-IQ3_S")
+        self.assertEqual(setup.own_path_size(fam, 31.7), "UD-IQ3_S")     # a "32 GB" PC as Windows counts it
         self.assertEqual(setup.own_path_size(fam, 32.0), "UD-Q4_K_XL")
         self.assertEqual(setup.own_path_size(fam, 46.0), "UD-Q6_K_XL")
         self.assertEqual(setup.own_path_size(fam, 64.0), "Q8_0")
+        self.assertEqual(setup.own_path_size(fam, 64.0, 8.0), "UD-IQ3_S")   # an 8 GB card: the 8 GB settings' size
+        self.assertEqual(setup.own_path_size(fam, 16.0, 8.0), "UD-Q4_K_XL") # ... where the RAM holds it
+        self.assertEqual(setup.own_path_size(fam, 64.0, 12.0), "Q8_0")
 
     def test_context_recommendation(self):
         fam = setup.OWN_PATH_FAMILIES["qwen36"]
@@ -148,6 +157,126 @@ class InstallOwnPath(unittest.TestCase):
         self.assertEqual(self.cfg["model_name"], "qwen3.6-35b-a3b-ud-q4_k_xl")
         self.assertEqual(Path(self.cfg["exe"]).parent, self.root / "engine")
         self.assertIn(("config", "strata-qwen36-ud-q4_k_xl.json"), self.calls)
+
+    def test_iq3_s_is_converted_after_the_download_and_the_converted_file_runs(self):
+        rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 0, out)
+        folder = self.root / "models" / "qwen36-UD-IQ3_S"
+        src = folder / "Qwen3.6-35B-A3B-UD-IQ3_S.gguf"
+        mid, ready = folder / "Qwen3.6-35B-A3B-UD-IQ3_S-strata.gguf", folder / "Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf"
+        self.assertEqual([c[2] for c in self.calls if c[0] == "get"], [src])
+        conv = [c[1] for c in self.calls if c[0] == "run" and "q36_mtp_requant.py" in str(c[1])]
+        self.assertEqual(len(conv), 2)                 # the download -> the pinned Q8_0 form -> the pinned compact form
+        self.assertEqual([str(x) for x in conv[0][-5:]], [str(src), str(mid), "--force", "--mtp-format", "q8_0"])
+        self.assertEqual([str(x) for x in conv[1][-4:]], [str(mid), str(ready), "--force", "--recompact"])
+        order = [c for c in self.calls if c[0] in ("sha", "run")]
+        steps = [("sha", src.name), ("run", conv[0]), ("sha", mid.name), ("run", conv[1]), ("sha", ready.name)]
+        self.assertEqual([order.index(x) for x in steps], sorted(order.index(x) for x in steps))   # each checked before the next
+        a = self.cfg["args"]
+        self.assertEqual(a[a.index("--native") + 1], str(ready))
+        self.assertEqual(self.cfg["model_name"], "qwen3.6-35b-a3b-ud-iq3_s")
+
+    def test_iq3_s_already_converted_is_neither_downloaded_nor_converted_again(self):
+        folder = self.root / "models" / "qwen36-UD-IQ3_S"
+        folder.mkdir(parents=True)
+        ready = folder / "Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf"
+        ready.write_text("x")
+        ready.with_name(ready.name + ".done").write_text("sha256 x")
+        with mock.patch.object(setup, "free_gb", lambda p: 1.0):    # nothing to download: no disk needed
+            rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c for c in self.calls if c[0] == "get"], [])
+        self.assertFalse([c for c in self.calls if c[0] == "run" and "q36_mtp_requant.py" in str(c[1])])
+        self.assertIn("already prepared", out)
+        self.assertEqual(self.cfg["args"][self.cfg["args"].index("--native") + 1], str(ready))
+
+    def test_iq3_s_converted_file_without_a_finish_mark_is_checked_not_downloaded_again(self):
+        folder = self.root / "models" / "qwen36-UD-IQ3_S"
+        folder.mkdir(parents=True)
+        ready = folder / "Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf"
+        ready.write_text("x")                                      # made by hand, or a mark that could not be written
+        with mock.patch.object(setup, "free_gb", lambda p: 1.0):
+            rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c for c in self.calls if c[0] == "get"], [])
+        self.assertIn(("sha", ready.name), self.calls)
+        self.assertIn("checking its SHA-256", out)
+
+    def test_iq3_s_first_step_file_is_made_compact_without_a_download(self):
+        folder = self.root / "models" / "qwen36-UD-IQ3_S"
+        folder.mkdir(parents=True)
+        mid = folder / "Qwen3.6-35B-A3B-UD-IQ3_S-strata.gguf"      # what an earlier setup made (the Q8_0 MTP block)
+        mid.write_text("x")
+        mid.with_name(mid.name + ".done").write_text("sha256 x")
+        with mock.patch.object(setup, "free_gb", lambda p: 16.0):   # room for the compact file only
+            rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c for c in self.calls if c[0] == "get"], [])
+        conv = [c[1] for c in self.calls if c[0] == "run" and "q36_mtp_requant.py" in str(c[1])]
+        self.assertEqual(len(conv), 1)
+        self.assertIn("--recompact", conv[0])
+        self.assertIn(("sha", mid.name), self.calls)
+        self.assertFalse(mid.exists())                             # removed once the compact file checks out
+        self.assertTrue(self.cfg["args"][self.cfg["args"].index("--native") + 1].endswith("UD-IQ3_S-compact.gguf"))
+
+    def test_iq3_s_download_is_removed_once_the_converted_file_checks_out(self):
+        folder = self.root / "models" / "qwen36-UD-IQ3_S"
+        folder.mkdir(parents=True)
+        src = folder / "Qwen3.6-35B-A3B-UD-IQ3_S.gguf"
+        src.write_text("x")
+        src.with_name(src.name + ".done").write_text("sha256 x")
+        rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c for c in self.calls if c[0] == "get"], [])   # the download was already there
+        self.assertFalse(src.exists())
+        self.assertFalse(src.with_name(src.name + ".done").exists())
+
+    def test_iq3_s_needs_disk_for_the_download_and_the_converted_copy(self):
+        with mock.patch.object(setup, "free_gb", lambda p: 20.0):   # 15.3 + 15.9 GB at the peak
+            rc, out = self.install(model="UD-IQ3_S", vision="no", ram=32.0, vram=8.0)
+        self.assertEqual(rc, 1)
+        self.assertIn("not enough free disk space", out)
+
+    def test_kv_int8_asks_the_engine_for_its_8_bit_cache_and_only_then(self):
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("--kv", self.cfg["args"])                 # the default: fp32, as before
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", kv="int8")
+        self.assertEqual(rc, 0, out)
+        a = self.cfg["args"]
+        self.assertEqual(a[a.index("--kv") + 1], "q8")
+        self.assertNotIn("Flash-Next settings", out)
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", kv="q4_0")   # not this path's: said, not passed on
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("--kv", self.cfg["args"])
+        self.assertIn("its memory takes --kv int8", out)
+
+    def test_an_8gb_card_gets_the_8gb_settings_by_default(self):
+        rc, out = self.install(ram=32.0, vram=8.0, vision="no")
+        self.assertEqual(rc, 0, out)
+        a = self.cfg["args"]
+        self.assertTrue(a[a.index("--native") + 1].endswith("Qwen3.6-35B-A3B-UD-IQ3_S-compact.gguf"))
+        self.assertIn("Recommended for this 8 GB card: UD-IQ3_S", out)
+        self.assertEqual(a[a.index("--kv") + 1], "q8")
+        self.assertEqual(a[a.index("--max-context") + 1], "131072")
+        self.assertEqual(a[a.index("--prompt-cache") + 1], "3")
+        self.assertEqual(self.cfg["env"]["STRATA_Q36_RELEASE_FILE_PAGES"], "1")
+        self.assertIn("the default on an 8 GB card", out)
+
+    def test_an_8gb_card_keeps_fp32_when_another_memory_is_asked_for(self):
+        rc, out = self.install(ram=32.0, vram=8.0, vision="no", kv="fp16")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("--kv", self.cfg["args"])
+        self.assertIn("--prompt-cache", self.cfg["args"])          # the rest of the 8 GB settings stay
+
+    def test_a_12gb_card_is_unchanged(self):
+        rc, out = self.install(ram=32.0, vram=12.0, vision="no")
+        self.assertEqual(rc, 0, out)
+        a = self.cfg["args"]
+        self.assertTrue(a[a.index("--native") + 1].endswith("UD-Q4_K_XL.gguf"))   # by the RAM, as before
+        self.assertNotIn("--kv", a)
+        self.assertNotIn("--prompt-cache", a)
+        self.assertNotIn("STRATA_Q36_RELEASE_FILE_PAGES", self.cfg.get("env") or {})
 
     def test_gguf_dir_takes_the_persons_own_files_that_have_no_finish_mark(self):
         folder = self.root / "own"

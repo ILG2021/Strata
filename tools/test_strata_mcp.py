@@ -640,13 +640,15 @@ class Helpers(unittest.TestCase):
         fam = next(f for f in s.model_table({"ram_gb": 63.7, "gpus": [{"index": 0, "name": "x", "vram_gb": 12.0, "usable": True}]})
                    if f["family"] == "qwen36")
         by = {x["model"]: x for x in fam["sizes"]}
-        self.assertEqual(list(by), ["UD-Q4_K_XL", "UD-Q6_K_XL", "Q8_0"])
+        self.assertEqual(list(by), ["UD-Q4_K_XL", "UD-Q6_K_XL", "Q8_0", "UD-IQ3_S"])
         self.assertEqual(by["UD-Q4_K_XL"]["id"], "qwen36-ud-q4_k_xl")          # the tag the install writes its config under
         self.assertEqual(by["UD-Q4_K_XL"]["download_gb"], 22.9)
         self.assertTrue(all(x["images"] and x["engine_min"] == "0.1.45" and x["gpu_options"] is None for x in by.values()))
         self.assertEqual({x["on_this_pc"] for x in by.values()}, {"fits"})
         small = next(f for f in s.model_table({"ram_gb": 16, "gpus": []}) if f["family"] == "qwen36")
-        self.assertEqual({x["on_this_pc"] for x in small["sizes"]}, {"may run slower"})        # 16 GB, no card: 21 to 36 GB of weights
+        by_small = {x["model"]: x["on_this_pc"] for x in small["sizes"]}
+        self.assertEqual({v for m, v in by_small.items() if m != "UD-IQ3_S"}, {"may run slower"})   # 16 GB, no card: 21 to 36 GB of weights
+        self.assertEqual(by_small["UD-IQ3_S"], "fits")       # the one rule (fit_label): its 15.3 GB of files against 16 GB
         self.assertEqual(s.sizes_of(s.tables()[0], "unsloth")[:5], ["UD-IQ4_XS", "UD-Q4_K_XL", "UD-Q5_K_XL", "UD-Q6_K_XL", "Q8_0"])      # the Unsloth Flash-Next sizes are untouched (round 0214 adds sizes after them)
 
     def test_qwen36_install_plan(self):

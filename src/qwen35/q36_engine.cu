@@ -17,6 +17,7 @@
 // Modes: --serve (serve/server.py's engine protocol: READY / GEN / T / DONE / STOP / PP), --tokens IDS [--n N]
 // [--force IDS] [--dump-full-logits F] (tools/qwen35/kl.py's reference interface), --bench-pp N / --bench-tg N.
 #include "strata/artifact/gguf_reader.hpp"
+#include "strata/core/conversation_memory.hpp"
 #include "strata/core/family_layout.hpp"
 #include "strata/kernels/fused_gdn.hpp"
 #include "strata/kernels/iq_kernels.hpp"
@@ -246,7 +247,29 @@ struct RowSel {
     const int32_t* delta = nullptr;  // device [T]
     float* const* kc = nullptr;      // device [n_sessions]: this layer's K / V base of each session
     float* const* vc = nullptr;
+    int kv8 = 0;                     // --kv q8: the K / V caches hold q8 rows (kKv8Row), not fp32 ones (set in every mode)
 };
+
+/// --kv q8 (opt-in): a cache cell's K or V head row (HD == 256) is 256 int8 values and then 8 fp32 scales, one per 32
+/// values (symmetric, scale = max |x| / 127, as ggml's q8_0): 288 bytes instead of 1024.  The default stays fp32.
+constexpr int kKv8Row = 256 + 8 * 4;
+__device__ __forceinline__ const int8_t* kv8_q(const float* base, size_t row) {
+    return (const int8_t*) ((const char*) base + row * kKv8Row);
+}
+__device__ __forceinline__ const float* kv8_s(const float* base, size_t row) {
+    return (const float*) ((const char*) base + row * kKv8Row + 256);
+}
+/// One value of a q8 row written by its warp: lane i % 32 of the warp that holds values [32b, 32b + 32).  Every lane of
+/// the warp must call it (the block max is a shuffle).
+__device__ __forceinline__ void kv8_store(float* base, size_t row, int i, float x) {
+    float a = fabsf(x);
+    for (int o = 16; o > 0; o >>= 1) a = fmaxf(a, __shfl_xor_sync(0xffffffffu, a, o));
+    const float d = a / 127.0f;
+    const float id = d > 0.0f ? 1.0f / d : 0.0f;
+    char* r = (char*) base + row * kKv8Row;
+    ((int8_t*) r)[i] = (int8_t) __float2int_rn(x * id);
+    if ((i & 31) == 0) ((float*) (r + 256))[i >> 5] = d;
+}
 
 /// The attention layer's per-token preparation for T rows at positions *pos0 + t: q (from the [q | gate] pairs) and k
 /// RMS-normed per head with their weights, NEOX RoPE over the first n_rot dims, k / v into the cache, the gate kept.
@@ -291,6 +314,11 @@ __global__ void k_attn_prep(const float* qg, const float* kx, const float* vx, c
         gate[((size_t) t * H + head) * HD + i] = qg[((size_t) t * H + head) * 2 * HD + HD + i];
     } else {
         const int kh = head - H;
+        if (rs.kv8) {   // HD == 256: every lane of the block's 8 warps is here
+            kv8_store(kc, (size_t) kh * ctx + pos, i, v);
+            kv8_store(vc, (size_t) kh * ctx + pos, i, vx[((size_t) t * HKV + kh) * HD + i]);
+            return;
+        }
         kc[((size_t) kh * ctx + pos) * HD + i] = v;
         vc[((size_t) kh * ctx + pos) * HD + i] = vx[((size_t) t * HKV + kh) * HD + i];
     }
@@ -318,9 +346,19 @@ __global__ void k_attn_part(const float* q, const float* kc, const float* vc, co
     const int p = p0 + j;
     float s = -INFINITY;
     if (p < npos) {
-        const float* kp = kc + ((size_t) kvh * ctx + p) * HD;
         float a = 0.f;
-        for (int i = 0; i < HD; ++i) a += qs[i] * kp[i];
+        if (rs.kv8) {
+            const int8_t* kq = kv8_q(kc, (size_t) kvh * ctx + p);
+            const float* ks = kv8_s(kc, (size_t) kvh * ctx + p);
+            for (int b = 0; b < HD / 32; ++b) {
+                float part = 0.f;
+                for (int i = b * 32; i < b * 32 + 32; ++i) part += qs[i] * (float) kq[i];
+                a += part * ks[b];
+            }
+        } else {
+            const float* kp = kc + ((size_t) kvh * ctx + p) * HD;
+            for (int i = 0; i < HD; ++i) a += qs[i] * kp[i];
+        }
         s = a * scale;
     }
     const float m = block_max(s, sh);
@@ -329,8 +367,15 @@ __global__ void k_attn_part(const float* q, const float* kc, const float* vc, co
     const float l = block_sum(e, sh);
     const int n = min(kChunkCells, npos - p0);
     float acc = 0.f;
-    const float* vp = vc + ((size_t) kvh * ctx + p0) * HD + j;
-    for (int k = 0; k < n; ++k) acc += sc[k] * vp[(size_t) k * HD];
+    if (rs.kv8) {
+        for (int k = 0; k < n; ++k) {
+            const size_t r = (size_t) kvh * ctx + p0 + k;
+            acc += sc[k] * ((float) kv8_q(vc, r)[j] * kv8_s(vc, r)[j >> 5]);
+        }
+    } else {
+        const float* vp = vc + ((size_t) kvh * ctx + p0) * HD + j;
+        for (int k = 0; k < n; ++k) acc += sc[k] * vp[(size_t) k * HD];
+    }
     const size_t o = (size_t) row * n_chunk + c;
     pacc[o * HD + j] = acc;
     if (j == 0) {
@@ -426,11 +471,19 @@ __global__ void k_merge_cpu(float* parts, const float* cpu, const int32_t* miss,
 }
 /// The prompt attention's FP16 operands: cells [0, P) of each KV head's K / V (cache rows ctx apart) into compact
 /// [kvh][P][HD] halves.  grid1(HKV * P * HD).
-__global__ void k_kv_f16(const float* kc, const float* vc, __half* k16, __half* v16, int ctx, int P, int HD, int HKV) {
+__global__ void k_kv_f16(const float* kc, const float* vc, __half* k16, __half* v16, int ctx, int P, int HD, int HKV,
+                         int kv8) {
     const int64_t i = (int64_t) blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= (int64_t) HKV * P * HD) return;
     const int64_t per = (int64_t) P * HD;
     const int64_t kvh = i / per, rest = i % per;
+    if (kv8) {   // --kv q8: HD == 256
+        const size_t r = (size_t) kvh * ctx + rest / HD;
+        const int d = (int) (rest % HD);
+        k16[i] = __float2half((float) kv8_q(kc, r)[d] * kv8_s(kc, r)[d >> 5]);
+        v16[i] = __float2half((float) kv8_q(vc, r)[d] * kv8_s(vc, r)[d >> 5]);
+        return;
+    }
     const size_t src = (size_t) kvh * ctx * HD + rest;
     k16[i] = __float2half(kc[src]);
     v16[i] = __float2half(vc[src]);
@@ -1147,6 +1200,7 @@ struct Engine {
     const Model* m = nullptr;
     cudaStream_t st = nullptr;
     int ctx = 32768, tmax = 512;
+    bool kv8 = false;   // --kv q8: 8-bit K / V caches (opt-in; set before init)
     int64_t pos = 0;   // cells holding a processed token
     // activations [tmax][...]
     float *x, *h, *y, *qkv, *hc, *z, *alpha, *beta, *gdn_y, *qg, *kx, *vx, *q, *gate, *att, *logits_r, *eparts, *moe_out,
@@ -1288,6 +1342,11 @@ struct Engine {
         }
     }
 
+    /// Bytes of one cache cell's K (or V) head row: fp32 by default, a q8 row with --kv q8.
+    size_t kv_row_bytes() const { return kv8 ? (size_t) kKv8Row : (size_t) m->g.head_dim * 4; }
+    /// One layer's K (or V) cache of a session, in floats (dalloc's unit; a q8 row is 72 of them).
+    size_t kv_floats() const { return (size_t) m->g.n_head_kv * ctx * kv_row_bytes() / 4; }
+
     void alloc_session(Sess& ss) const {
         const auto& g = m->g;
         const size_t C = (size_t) g.ssm_conv_channels;
@@ -1295,8 +1354,8 @@ struct Engine {
             if (L.attn) {
                 ss.conv.push_back(nullptr);
                 ss.S.push_back(nullptr);
-                ss.kc.push_back(dalloc((size_t) g.n_head_kv * ctx * g.head_dim));
-                ss.vc.push_back(dalloc((size_t) g.n_head_kv * ctx * g.head_dim));
+                ss.kc.push_back(dalloc(kv_floats()));
+                ss.vc.push_back(dalloc(kv_floats()));
             } else {
                 ss.conv.push_back(dalloc(C * (g.ssm_d_conv - 1)));
                 ss.S.push_back(dalloc((size_t) g.ssm_v_heads * g.ssm_state_size * g.ssm_state_size));
@@ -1307,8 +1366,8 @@ struct Engine {
         if (m->has_mtp) {   // the MTP block's own K / V (an attention layer at index n_layers)
             ss.conv.push_back(nullptr);
             ss.S.push_back(nullptr);
-            ss.kc.push_back(dalloc((size_t) g.n_head_kv * ctx * g.head_dim));
-            ss.vc.push_back(dalloc((size_t) g.n_head_kv * ctx * g.head_dim));
+            ss.kc.push_back(dalloc(kv_floats()));
+            ss.vc.push_back(dalloc(kv_floats()));
         }
         ss.hlast = dalloc((size_t) g.n_embd);
     }
@@ -1454,7 +1513,7 @@ struct Engine {
             // the MTP block, and its recurrent state)
             size_t n_attn = m->has_mtp ? 1 : 0, n_gdn = 0;
             for (const Layer& L : m->layers) (L.attn ? n_attn : n_gdn) += 1;
-            const size_t per = (size_t) (g.n_head_kv * g.head_dim * 2 * 4) * (size_t) ctx * n_attn +
+            const size_t per = (size_t) g.n_head_kv * kv_row_bytes() * 2 * (size_t) ctx * n_attn +
                                (size_t) g.ssm_v_heads * g.ssm_state_size * g.ssm_state_size * 4 * n_gdn;
             size_t fr0 = 0, tot0 = 0;
             CK(cudaMemGetInfo(&fr0, &tot0));
@@ -1522,6 +1581,78 @@ struct Engine {
         pos = 0;
         sess[(size_t) cur].pos = 0;
         set_delta(0);
+    }
+
+    // ---- --prompt-cache (opt-in): conversation checkpoints.  The recurrent state cannot step back, so a prompt that
+    // differs from the held tokens anywhere used to be read from token 0.  A checkpoint is a copy (in host RAM) of the
+    // current session's recurrent state - every GDN layer's conv history and state - and its last hidden, taken while a
+    // prompt is read.  The K / V cells below it are not copied: they are still the session's while it holds those tokens.
+    size_t gdn_floats() const {
+        const auto& g = m->g;
+        return (size_t) g.ssm_conv_channels * (size_t) (g.ssm_d_conv - 1) +
+               (size_t) g.ssm_v_heads * (size_t) g.ssm_state_size * (size_t) g.ssm_state_size;
+    }
+    size_t state_floats() const {
+        size_t n = (size_t) m->g.n_embd;
+        for (size_t l = 0; l < conv.size(); ++l)
+            if (conv[l]) n += gdn_floats();
+        return n;
+    }
+    /// The current session's recurrent state and last hidden into `dst` (state_floats() floats).
+    void state_out(float* dst) {
+        const auto& g = m->g;
+        const size_t nc = (size_t) g.ssm_conv_channels * (size_t) (g.ssm_d_conv - 1), ns = gdn_floats() - nc;
+        CK(cudaStreamSynchronize(st));
+        for (size_t l = 0; l < conv.size(); ++l) {
+            if (!conv[l]) continue;
+            CK(cudaMemcpyAsync(dst, conv[l], nc * 4, cudaMemcpyDeviceToHost, st));
+            CK(cudaMemcpyAsync(dst + nc, S[l], ns * 4, cudaMemcpyDeviceToHost, st));
+            dst += nc + ns;
+        }
+        CK(cudaMemcpyAsync(dst, hlast, (size_t) g.n_embd * 4, cudaMemcpyDeviceToHost, st));
+        CK(cudaStreamSynchronize(st));
+    }
+    /// The current session continues from a checkpoint of `at` tokens: its state back, the position there.
+    void state_in(const float* src, int64_t at, int32_t rdelta) {
+        const auto& g = m->g;
+        const size_t nc = (size_t) g.ssm_conv_channels * (size_t) (g.ssm_d_conv - 1), ns = gdn_floats() - nc;
+        CK(cudaStreamSynchronize(st));
+        for (size_t l = 0; l < conv.size(); ++l) {
+            if (!conv[l]) continue;
+            CK(cudaMemcpyAsync(conv[l], src, nc * 4, cudaMemcpyHostToDevice, st));
+            CK(cudaMemcpyAsync(S[l], src + nc, ns * 4, cudaMemcpyHostToDevice, st));
+            src += nc + ns;
+        }
+        CK(cudaMemcpyAsync(hlast, src, (size_t) g.n_embd * 4, cudaMemcpyHostToDevice, st));
+        CK(cudaStreamSynchronize(st));
+        pos = at;
+        sess[(size_t) cur].pos = at;
+        set_delta(rdelta);
+    }
+    /// Bytes of one cache cell over every attention layer (the MTP block's too), K and V.
+    size_t kv_cell_bytes() const {
+        size_t n = 0;
+        for (size_t l = 0; l < kc.size(); ++l)
+            if (kc[l]) n += 2 * (size_t) m->g.n_head_kv * kv_row_bytes();
+        return n;
+    }
+    /// The current session's K / V cells [a, b) to or from `host` (kv_cell_bytes() * (b - a) bytes; per layer K then V,
+    /// per KV head its cells in order).
+    void kv_copy(int64_t a, int64_t b, char* host, bool out) {
+        if (b <= a) return;
+        const size_t row = kv_row_bytes(), w = (size_t) (b - a) * row, pitch = (size_t) ctx * row;
+        const size_t H = (size_t) m->g.n_head_kv;
+        CK(cudaStreamSynchronize(st));
+        for (size_t l = 0; l < kc.size(); ++l) {
+            if (!kc[l]) continue;
+            for (float* base : {kc[l], vc[l]}) {
+                char* dev = (char*) base + (size_t) a * row;
+                if (out) CK(cudaMemcpy2DAsync(host, w, dev, pitch, w, H, cudaMemcpyDeviceToHost, st));
+                else CK(cudaMemcpy2DAsync(dev, pitch, host, w, w, H, cudaMemcpyHostToDevice, st));
+                host += w * H;
+            }
+        }
+        CK(cudaStreamSynchronize(st));
     }
 
     /// y [T][n_out] = W x [T][n_in] on the native MMVQ, 8 columns per launch.
@@ -1932,6 +2063,7 @@ struct Engine {
             apply(L.wk, xq, kx, T);
             apply(L.wv, xq, vx, T);
             RowSel rs;
+            rs.kv8 = kv8 ? 1 : 0;
             if (rows_mode) {
                 rs.cell = d_rcell;
                 rs.slot = d_rslot;
@@ -1951,7 +2083,7 @@ struct Engine {
                 const int tq = (int) std::max<int64_t>(1, std::min<int64_t>(T, (int64_t) (kAttScoreFloats / ((size_t) H * ldp))));
                 const int G = H / HKV;
                 const float one = 1.0f, zero = 0.0f;
-                k_kv_f16<<<grid1((int64_t) HKV * P * HD), kThreads, 0, st>>>(kc[li], vc[li], k16, v16, ctx, P, HD, HKV);
+                k_kv_f16<<<grid1((int64_t) HKV * P * HD), kThreads, 0, st>>>(kc[li], vc[li], k16, v16, ctx, P, HD, HKV, kv8 ? 1 : 0);
                 k_to_f16<<<grid1((int64_t) T * H * HD), kThreads, 0, st>>>(q, q16, (int64_t) T * H * HD);
                 for (int t0 = 0; t0 < T; t0 += tq) {
                     const int nt = std::min(tq, T - t0);
@@ -2656,7 +2788,7 @@ struct Engine {
         const Sess& a = sess[(size_t) src];
         Sess& b = sess[(size_t) dst];
         const size_t C = (size_t) g.ssm_conv_channels;
-        const size_t row = (size_t) ctx * g.head_dim * 4;
+        const size_t row = (size_t) ctx * kv_row_bytes();
         for (size_t l = 0; l < a.conv.size(); ++l) {
             if (a.conv[l]) {
                 CK(cudaMemcpyAsync(b.conv[l], a.conv[l], C * (g.ssm_d_conv - 1) * 4, cudaMemcpyDeviceToDevice, st));
@@ -2664,9 +2796,9 @@ struct Engine {
                                    cudaMemcpyDeviceToDevice, st));
             }
             if (a.kc[l] && a.pos > 0) {
-                CK(cudaMemcpy2DAsync(b.kc[l], row, a.kc[l], row, (size_t) a.pos * g.head_dim * 4, (size_t) g.n_head_kv,
+                CK(cudaMemcpy2DAsync(b.kc[l], row, a.kc[l], row, (size_t) a.pos * kv_row_bytes(), (size_t) g.n_head_kv,
                                      cudaMemcpyDeviceToDevice, st));
-                CK(cudaMemcpy2DAsync(b.vc[l], row, a.vc[l], row, (size_t) a.pos * g.head_dim * 4, (size_t) g.n_head_kv,
+                CK(cudaMemcpy2DAsync(b.vc[l], row, a.vc[l], row, (size_t) a.pos * kv_row_bytes(), (size_t) g.n_head_kv,
                                      cudaMemcpyDeviceToDevice, st));
             }
         }
@@ -3180,8 +3312,162 @@ struct Serve {
     // takes ~0.15 s at 512 tokens, a window ~0.012 s: more windows give the decoding slots more of the time a read takes)
     int read_windows = 1;
 
+    // ---- --prompt-cache N (opt-in; one session, no --batch): conversation checkpoints (Engine::state_out).  A prompt
+    // read from token 0 is checkpointed at the end of its system prompt (when that is --prompt-cache-root tokens or
+    // more), every prompt at its last <|im_start|> (--turn-token): the next request of the chat renders the same history
+    // up to there but not always the same last reply (a client that drops the thinking, re-rendered tool calls).
+    struct Ckpt {
+        std::vector<int32_t> ids;     // the tokens it holds the state after
+        std::vector<float> state;     // Engine::state_floats()
+        int32_t rdelta = 0;
+        bool root = false;            // the system prompt's: kept while the session holds it
+        uint64_t made = 0;
+    };
+    int ckpt_max = 0;                 // checkpoints kept (0: off, the old behaviour)
+    static constexpr int64_t kCkptMinTokens = 256;   // a shorter start is read again faster than a checkpoint is worth
+    int32_t turn_token = 248045;      // <|im_start|>
+    int64_t ckpt_root = 2048;
+    uint64_t ckpt_floor = 512ull << 20;   // RAM that stays available (STRATA_Q36_CKPT_FLOOR_MIB)
+    uint64_t ckpt_clock = 0;
+    bool ckpt_ram_said = false;
+    std::vector<Ckpt> checks;         // prefixes of session 0's held tokens: the K / V cells below each are still its own
+    // A conversation that a request with another prompt moved out of the session (opencode asks the same model for a
+    // title between two turns): its checkpoints, and its K / V cells [0, held_host) in RAM.  Cells [held_host,
+    // held_top) are still its own on the GPU: every write below held_top copies them out first (guard_held).
+    std::vector<Ckpt> held;
+    std::vector<std::vector<char>> held_kv;   // cells [0, held_host) in segments, in order
+    int64_t held_host = 0, held_top = 0;
+
     explicit Serve(Engine& e) : E(e), slots((size_t) e.n_sess) {
         if (const char* v = std::getenv("STRATA_Q36_READ_WINDOWS")) read_windows = std::max(0, std::min(64, std::atoi(v)));
+        if (const char* v = std::getenv("STRATA_Q36_CKPT_FLOOR_MIB")) ckpt_floor = (uint64_t) std::max(0, std::atoi(v)) << 20;
+    }
+
+    bool ckpt_on() const { return ckpt_max > 0 && E.n_sess == 1; }
+    bool ram_for(size_t bytes) {
+        if (ckpt_floor == 0) return true;   // STRATA_Q36_CKPT_FLOOR_MIB=0: no check (a failed allocation still skips the save)
+        const auto av = strata::core::available_host_bytes();
+        if (av && *av >= bytes + ckpt_floor) return true;
+        if (!ckpt_ram_said) {
+            ckpt_ram_said = true;
+            std::fprintf(stderr, "strata-q36: prompt cache: %.0f MiB of RAM available, under the %llu MiB floor plus %.0f MiB: "
+                         "checkpoints are skipped while RAM is this short (STRATA_Q36_CKPT_FLOOR_MIB sets the floor)\n",
+                         av ? (double) *av / (1 << 20) : 0.0, (unsigned long long) (ckpt_floor >> 20), (double) bytes / (1 << 20));
+        }
+        return false;
+    }
+    static bool starts(const std::vector<int32_t>& p, const std::vector<int32_t>& ids) {
+        return !p.empty() && p.size() < ids.size() && std::equal(p.begin(), p.end(), ids.begin());
+    }
+    void drop_held(const char* why) {
+        if (held.empty()) return;
+        if (why)
+            std::fprintf(stderr, "strata-q36: prompt cache: the moved-out conversation (%lld tokens) is dropped: %s\n",
+                         (long long) held_top, why);
+        held.clear();
+        held_kv.clear();
+        held_host = held_top = 0;
+    }
+    /// Cells up to `end` are about to be written: the moved-out conversation's cells there go to RAM first (256 cells
+    /// at least at a time, so decoding copies once every 256 tokens).
+    void guard_held(int64_t end) {
+        if (held.empty()) return;
+        const int64_t to = std::min(end, held_top);
+        if (to <= held_host) return;
+        const int64_t to2 = std::min(held_top, std::max(to, held_host + 256));
+        const size_t bytes = (size_t) (to2 - held_host) * E.kv_cell_bytes();
+        if (!ram_for(bytes)) { drop_held("not enough RAM for its cache cells"); return; }
+        try {
+            held_kv.emplace_back(bytes);
+        } catch (const std::bad_alloc&) {
+            drop_held("its cache cells could not be allocated");
+            return;
+        }
+        E.kv_copy(held_host, to2, held_kv.back().data(), true);
+        held_host = to2;
+    }
+    /// A checkpoint of the session's state now, which holds ids[0, L).
+    void add_check(int64_t L, const std::vector<int32_t>& ids, bool root) {
+        for (Ckpt& c : checks)
+            if ((int64_t) c.ids.size() == L) { c.made = ++ckpt_clock; return; }
+        while ((int) checks.size() >= ckpt_max) {   // room first (RAM is what limits this): the oldest that is not the root
+            int v = -1;
+            for (int i = 0; i < (int) checks.size(); ++i)
+                if (!checks[(size_t) i].root && (v < 0 || checks[(size_t) i].made < checks[(size_t) v].made)) v = i;
+            checks.erase(checks.begin() + (v < 0 ? 0 : v));
+        }
+        const size_t n = E.state_floats();
+        if (!ram_for(n * 4)) return;
+        Ckpt c;
+        try {
+            c.state.resize(n);
+        } catch (const std::bad_alloc&) {
+            return;
+        }
+        c.ids.assign(ids.begin(), ids.begin() + L);
+        c.rdelta = E.sess[(size_t) E.cur].rdelta;
+        c.root = root;
+        c.made = ++ckpt_clock;
+        E.state_out(c.state.data());
+        checks.push_back(std::move(c));
+    }
+    /// Before a solo text request is read: the longest held start of `ids` - the live tokens (`reuse`), a checkpoint,
+    /// or the moved-out conversation - becomes the session's.  Returns the tokens it holds.
+    size_t ckpt_resume(Engine::Sess& ss, const std::vector<int32_t>& ids, size_t reuse) {
+        const Ckpt* best = nullptr;
+        for (const Ckpt& c : checks)
+            if (c.ids.size() > reuse && (!best || c.ids.size() > best->ids.size()) && starts(c.ids, ids)) best = &c;
+        const Ckpt* hb = nullptr;
+        const size_t have = std::max(reuse, best ? best->ids.size() : (size_t) 0);
+        for (const Ckpt& c : held)
+            if (c.ids.size() > have && (!hb || c.ids.size() > hb->ids.size()) && starts(c.ids, ids)) hb = &c;
+        auto keep_below = [&](size_t L) {
+            checks.erase(std::remove_if(checks.begin(), checks.end(), [&](const Ckpt& c) { return c.ids.size() > L; }),
+                         checks.end());
+        };
+        if (hb) {   // the moved-out conversation comes back: its cells from RAM, its checkpoints (the session's go)
+            const auto t0 = Clock::now();
+            const size_t cb = E.kv_cell_bytes();
+            int64_t at = 0;
+            for (std::vector<char>& seg : held_kv) {
+                const int64_t n = (int64_t) (seg.size() / cb);
+                E.kv_copy(at, at + n, seg.data(), false);
+                at += n;
+            }
+            const size_t L = hb->ids.size();
+            E.state_in(hb->state.data(), (int64_t) L, hb->rdelta);
+            ss.live.assign(hb->ids.begin(), hb->ids.end());
+            ss.imgs.clear();
+            std::fprintf(stderr, "strata-q36: prompt cache: the moved-out conversation is back at %zu tokens (%.0f MiB of "
+                         "cache cells from RAM in %.0f ms)\n", L, (double) (at * (int64_t) cb) / (1 << 20), ms_since(t0));
+            checks = std::move(held);
+            held.clear();
+            held_kv.clear();
+            held_host = held_top = 0;
+            keep_below(L);
+            return L;
+        }
+        if (best) {
+            const size_t L = best->ids.size();
+            E.state_in(best->state.data(), (int64_t) L, best->rdelta);
+            ss.live.assign(best->ids.begin(), best->ids.end());
+            ss.imgs.clear();
+            keep_below(L);
+            return L;
+        }
+        if (reuse == 0 && !checks.empty()) {
+            // another prompt replaces the conversation: it is kept aside (a longer one already aside stays)
+            size_t top = 0;
+            for (const Ckpt& c : checks) top = std::max(top, c.ids.size());
+            if ((int64_t) top >= kCkptMinTokens && (held.empty() || (int64_t) top >= held_top)) {
+                drop_held(nullptr);
+                held = std::move(checks);
+                held_top = (int64_t) top;
+                held_host = 0;
+            }
+            checks.clear();
+        }
+        return reuse;
     }
 
     /// BSTOP / BYIELD lines among the queued ones: applied now (a window is a moment away at most).
@@ -3524,17 +3810,43 @@ struct Serve {
             }
         }
         E.select(s);
+        const auto t0 = Clock::now();
+        // --prompt-cache: a solo text request resumes from the longest held start (a checkpoint, the moved-out
+        // conversation); a request with pictures keeps the checkpoints only when it continues the held tokens
+        const bool ck = ckpt_on() && !adm && !geni;
+        if (ck) reuse = ckpt_resume(ss, ids, reuse);
+        else if (ckpt_on()) {
+            if (reuse == 0) checks.clear();
+            drop_held(nullptr);
+        }
         if (reuse == 0) {
             E.reset();
             ss.live.clear();
             ss.imgs.clear();
         }
+        if (ck) guard_held((int64_t) ids.size());
         if (geni) E.set_images(ir.rows, ir.cell_row, ir.mrope, (int64_t) ids.size(), ir.delta);
         else E.clear_images();
-        const auto t0 = Clock::now();
         const int64_t fresh = (int64_t) (ids.size() - reuse);
+        // the read stops at the system prompt's end and at the last turn boundary for a checkpoint there
+        std::vector<std::pair<int64_t, bool>> cuts;   // (cell, root)
+        if (ck && fresh > 1) {
+            const int64_t n = (int64_t) ids.size();
+            int64_t turn_at = -1;
+            for (int64_t i = n - 1; i > (int64_t) reuse; --i)
+                if (ids[(size_t) i] == turn_token) { turn_at = i; break; }
+            if (turn_at > 0 && reuse == 0 && ckpt_root > 0)
+                for (int64_t i = 1; i < turn_at; ++i)
+                    if (ids[(size_t) i] == turn_token) {
+                        if (i >= ckpt_root) cuts.push_back({i, true});
+                        break;
+                    }
+            if (turn_at >= kCkptMinTokens) cuts.push_back({turn_at, false});
+        }
         bool cancelled = false;
-        const int64_t got = E.process(ids.data() + reuse, fresh, [&](int64_t done) -> bool {
+        int64_t part0 = 0;   // tokens of this request read before the part being read
+        auto on_chunk = [&](int64_t done_in_part) -> bool {
+            const int64_t done = part0 + done_in_part;
             std::printf("PP %lld %lld %.0f %.1f\n", (long long) done, (long long) fresh, ms_since(t0),
                         (double) done / std::max(1e-9, ms_since(t0) / 1000.0));
             std::fflush(stdout);
@@ -3547,7 +3859,19 @@ struct Serve {
             }
             if (stop.load() && done < fresh) { cancelled = true; return false; }
             return true;
-        });
+        };
+        int64_t got = 0;
+        for (const auto& cut : cuts) {
+            const int64_t want = cut.first - (int64_t) reuse - got;
+            part0 = got;
+            got += E.process(ids.data() + reuse + got, want, on_chunk);
+            if (got < cut.first - (int64_t) reuse) break;   // cancelled
+            add_check(cut.first, ids, cut.second);
+        }
+        if (!cancelled) {
+            part0 = got;
+            got += E.process(ids.data() + reuse + got, fresh - got, on_chunk);
+        }
         ss.live.insert(ss.live.end(), ids.begin() + (long) reuse, ids.begin() + (long) reuse + (long) got);
         ss.imgs.clear();
         bool cut = false;
@@ -3632,6 +3956,7 @@ struct Serve {
             };
             if (!emit(nx)) break;
             if (n_active > 0) window();
+            if (ck) guard_held(E.pos + E.mtp_d + 2);   // the cells this step writes (a verify window: mtp_d + 1)
             if (spec && n_active == 0 && E.pos + E.mtp_d + 1 <= E.ctx) {
                 const int a = E.spec_step(nx, fix, E.mtp_d, drafts, picks, &stop);
                 offered += E.mtp_d;
@@ -3669,6 +3994,14 @@ struct Serve {
     }
 
     int run() {
+        if (ckpt_max > 0 && E.n_sess > 1)
+            std::fprintf(stderr, "strata-q36: --prompt-cache is for one session (no --batch) on this engine path: ignored\n");
+        else if (ckpt_max > 0)
+            std::fprintf(stderr, "strata-q36: prompt cache: up to %d checkpoints of %.0f MiB in RAM (the recurrent state), at the "
+                         "system prompt's end (%lld tokens or more) and the last turn (token %d); a conversation another "
+                         "prompt moves out keeps its cache cells in RAM (%.0f KiB a token); RAM floor %llu MiB\n", ckpt_max,
+                         (double) E.state_floats() * 4 / (1 << 20), (long long) ckpt_root, (int) turn_token,
+                         (double) E.kv_cell_bytes() / 1024, (unsigned long long) (ckpt_floor >> 20));
         if (E.n_sess > 1) std::printf("INFO batch_slots=%d slot_cache=1\n", E.n_sess);
         std::printf("READY %d stop\n", E.ctx);
         std::fflush(stdout);
@@ -3718,8 +4051,11 @@ struct Serve {
     }
 };
 
-int serve(Engine& E) {
+int serve(Engine& E, int prompt_cache, int32_t turn_token, int64_t prompt_cache_root) {
     Serve sv(E);
+    sv.ckpt_max = std::max(0, std::min(16, prompt_cache));
+    sv.turn_token = turn_token;
+    sv.ckpt_root = std::max<int64_t>(0, prompt_cache_root);
     return sv.run();
 }
 
@@ -3731,7 +4067,10 @@ int strata::qwen35::run(int argc, char** argv) {
     double expert_vram = -1.0;
     bool warm = true;
     int expert_slots = 0, batch = 0, draft_vocab = -1;
-    bool serve_mode = false, graph = true, vision = false, batch_mtp = false;
+    bool serve_mode = false, graph = true, vision = false, batch_mtp = false, kv8 = false;
+    int prompt_cache = 0;   // --prompt-cache N (opt-in on this path): conversation checkpoints, see Serve::Ckpt
+    int32_t turn_token = 248045;
+    int64_t prompt_cache_root = 2048;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() -> std::string {
@@ -3772,6 +4111,19 @@ int strata::qwen35::run(int argc, char** argv) {
         else if (a == "--cpu-threads") cpu_threads = std::atoi(next().c_str());
         else if (a == "--expert-slots") expert_slots = std::atoi(next().c_str());
         else if (a == "--hybrid-rows") hybrid_rows = std::atoi(next().c_str());
+        else if (a == "--prompt-cache") prompt_cache = std::atoi(next().c_str());
+        else if (a == "--turn-token") turn_token = (int32_t) std::atoi(next().c_str());
+        else if (a == "--prompt-cache-root") prompt_cache_root = std::atoll(next().c_str());
+        else if (a == "--kv") {
+            // the K / V caches: fp32 (the default, unchanged) or 8-bit (opt-in: q8 rows with a scale per 32 values, 3.6x
+            // smaller; `strata launch --kv int8` asks for it).  Flash-Next's other formats are not this path's: they are
+            // said and ignored, as every unknown option was before.
+            const std::string v = next();
+            if (v == "q8" || v == "q8_0" || v == "int8") kv8 = true;
+            else if (v == "fp32" || v == "f32") kv8 = false;
+            else std::fprintf(stderr, "strata-q36: ignoring --kv %s (this engine path keeps K / V in fp32, or in 8 bits with "
+                                      "--kv int8)\n", v.c_str());
+        }
         else if (serve_mode && a.rfind("--", 0) == 0) {
             // serve passes the config's args plus a few of its own: one this engine does not have is said and skipped
             // (with its value), not fatal
@@ -3834,7 +4186,7 @@ int strata::qwen35::run(int argc, char** argv) {
             // (measured on a 32 GB R9700 at 8192 cells, 512 chunk: 1.77 GiB of buffers + K / V; the free room after init must still hold
             // every expert and the 0.77 GiB reserve, or place_experts gives the packed decode copies back - slower decode - or goes hybrid)
             const int ns = std::max(1, batch);
-            const double kv_one = 45056.0, kv_shared = 5120.0;   // per cell: a session's K / V, and the fp16 copies the prompt attention keeps
+            const double kv_one = kv8 ? 45056.0 * 288.0 / 1024.0 : 45056.0, kv_shared = 5120.0;   // per cell: a session's K / V (--kv q8: q8 rows), and the fp16 copies the prompt attention keeps
             const double sess_extra = std::max(0.0, (double) ctx * (kv_one * ns + kv_shared) - 8192.0 * (kv_one + kv_shared));
             const int cap = ns > 1 ? 1024 : 4096;
             for (int c : {4096, 2048, 1024})
@@ -3853,10 +4205,20 @@ int strata::qwen35::run(int argc, char** argv) {
             std::fprintf(stderr, "strata-q36: chunk rule: free %.2f GiB (raw %.2f, with %.2f packed), main experts %.2f GiB, chunk %d\n",
                          fr / 1073741824.0, fr_raw / 1073741824.0, packed / 1073741824.0, experts / 1073741824.0, chunk);
     }
+    E.kv8 = kv8;
     E.init(m, ctx, chunk, batch, vision);
+    if (kv8) std::fprintf(stderr, "strata-q36: K / V caches in q8 (--kv q8)\n");
     if (!place_experts(m, E, expert_vram, cpu_threads, hybrid_rows, expert_slots, err)) {
         std::fprintf(stderr, "strata-q36: %s\n", err.c_str());
         return 1;
+    }
+    // STRATA_Q36_RELEASE_FILE_PAGES=1 (opt-in): every weight is now on the GPU or in the experts' own host memory, and
+    // nothing reads the mapped GGUF again; the pages the load read stayed in this process's working set (8.85 GiB of
+    // a 14.4 GiB UD-IQ3_S on a 32 GB PC), where Windows does not count them as available.  The mapping stays valid.
+    if (const char* v = std::getenv("STRATA_Q36_RELEASE_FILE_PAGES"); v && std::atoi(v) != 0) {
+        m.file->release_resident();
+        std::fprintf(stderr, "strata-q36: the model file's pages the load read are out of the working set "
+                             "(STRATA_Q36_RELEASE_FILE_PAGES)\n");
     }
     struct Report {
         Engine& E;
@@ -3879,7 +4241,7 @@ int strata::qwen35::run(int argc, char** argv) {
     E.bmtp = (batch_mtp || (std::getenv("STRATA_BATCH_MTP") != nullptr && std::string(std::getenv("STRATA_BATCH_MTP")) != "0")) && E.n_sess > 1 && E.mtp_d > 0;
     if (batch_mtp && !E.bmtp) std::fprintf(stderr, "strata-q36: --batch-mtp needs --batch N (2 or more) and --mtp N: ignored\n");
     if (warm) E.warmup();
-    if (serve_mode) return serve(E);
+    if (serve_mode) return serve(E, prompt_cache, turn_token, prompt_cache_root);
     if (bench_pp > 0 || bench_tg > 0) {
         // llama-bench's shapes: a prompt of bench_pp tokens from a fresh state, then bench_tg tokens one at a time
         std::vector<int32_t> toks((size_t) std::max(bench_pp, 1));

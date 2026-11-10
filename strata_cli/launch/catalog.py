@@ -396,7 +396,8 @@ class Catalog:
         own = self.strata.own_families()                # Qwen3.6 is listed for the app; the Terminal's launch list is Flash-Next's
         dsv41 = None
         for fam in self.strata.model_table(hw):
-            if fam["family"] in own and not own[fam["family"]].get("multi_file"):
+            # Qwen3.6 is the app's; the Terminal lists it where it is the recommendation (an 8 GB card: setup's 8 GB settings)
+            if fam["family"] in own and not own[fam["family"]].get("multi_file") and rec.get("family") != fam["family"]:
                 continue
             for size in fam["sizes"]:
                 f = fit_on(size, hw.get("ram_gb"), vram)
@@ -432,8 +433,8 @@ class Catalog:
         """`iq3_xxs` or `IQ3_XXS` (and an optional family) -> (family, model); raises ValueError with the closest match."""
         models, families, _ctx, _src = self.tables()
         names = list(models)
-        for fam_name, fam_d in families.items():       # DeepSeek-V4.1-Flash's size is not one of setup's MODELS
-            if fam_d.get("multi_file"):
+        for fam_name, fam_d in families.items():       # DeepSeek-V4.1-Flash's and Qwen3.6's sizes are not all among setup's MODELS (UD-IQ3_S)
+            if fam_d.get("multi_file") or fam_d.get("own_path"):
                 names += [m for m in self.strata.sizes_of(models, fam_name) if m not in names]
         import re
         wanted = re.sub(r"(?i)^ista-das(?=-\d)", "IST-DAS", model)     # the set's name on screen is ISTA-DAS; its ids keep the first spelling

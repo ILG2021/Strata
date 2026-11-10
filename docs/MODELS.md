@@ -45,7 +45,7 @@ They are estimates; a given context may still not fit.
 - **Less memory, coding only:** [Coder](#coder) runs around 32 GB of RAM with a suitable GPU.
 - **Less memory, general use:** compare Unsloth, then [Gyro](#gyro-s-and-gyro-m-agentionai), which uses the least memory and is slower.
 - **More memory:** [Unsloth's 4 to 8 bit files](#unsloths-files-ud-iq4_xs-to-q8_0) need 72 to 136 GB for all experts in RAM.
-- **A smaller model:** [Qwen3.6-35B-A3B](#qwen36-35b-a3b), 32 to 52 GB of RAM.
+- **A smaller model:** [Qwen3.6-35B-A3B](#qwen36-35b-a3b), 24 to 52 GB of RAM (UD-IQ3_S runs on an 8 GB card with 32 GB of RAM).
 - **A very large model:** [DeepSeek V4.1-Flash](#deepseek-v41-flash), 12 GB graphics card, 46 to 64 GB of RAM and 257 GB of disk.
 
 If RAM is short, setup can read experts from the SSD instead ([below](#will-it-fit)). That works and is much slower.
@@ -271,12 +271,16 @@ cards; the Intel Arc engine and the Mac engine do not run it. It reads pictures 
 
 | Size | File | RAM setup plans for | In plain words |
 | --- | ---: | ---: | --- |
-| **UD-Q4_K_XL** | 22.9 GB | 32 GB | 4-bit (Unsloth Dynamic), the smallest |
+| **UD-Q4_K_XL** | 22.9 GB | 32 GB | 4-bit (Unsloth Dynamic) |
 | **UD-Q6_K_XL** | 32.6 GB | 44 GB | 6-bit, closer to the full model |
 | **Q8_0** | 37.8 GB | 52 GB | 8-bit, the closest to the full model |
+| **UD-IQ3_S** | 15.3 GB | 24 GB | 3-bit (Unsloth Dynamic), the smallest; for 8 GB cards with 32 GB of RAM. Setup converts its MTP block once ([QWEN36.md](QWEN36.md#a-smaller-file-ud-iq3_s-8-gb-cards-32-gb-of-ram)) |
 
 The picture reader file adds 0.9 GB. The engine keeps every expert it can on the graphics card and computes the rest on
 the CPU.
+
+UD-IQ3_S decoded 40 to 46 tokens/s on an RTX 4060 Laptop GPU (8 GB) with 32 GB of RAM, at a 32K context
+(`strata launch --family qwen36 --model ud-iq3_s --context 32k`). Other IQ3 files do not run on this engine. With the opt-in 8-bit cache of a newer engine (`--kv q8`) and the compact MTP block it ran 128K on the same PC ([QWEN36.md](QWEN36.md#128k-on-an-8-gb-card-the-8-bit-cache-opt-in)).
 
 **Measured on:** UD-Q4_K_XL, decode only.
 

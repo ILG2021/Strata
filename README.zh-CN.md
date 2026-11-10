@@ -118,10 +118,11 @@ strata launch --family deepseek41 --model ist-das-2.00bpw --plan
 curl -fsSL https://github.com/Niko1221/Strata/releases/latest/download/install.sh -o install.sh && sh install.sh
 ```
 
-**Windows PowerShell**
+**Windows PowerShell**（本 fork，ILG2021：NVIDIA 显卡。在 8 GB 显卡上，`strata launch` 默认装好 Qwen3.6 UD-IQ3_S，并使用
+8 位缓存、128K 上下文和对话检查点，见 [QWEN36.md](docs/QWEN36.md#8-gb-cards-what-you-get-by-default-02132)）
 
 ```powershell
-irm https://github.com/Niko1221/Strata/releases/latest/download/install.ps1 | iex
+irm https://github.com/ILG2021/Strata/releases/latest/download/install.ps1 | iex
 ```
 
 在 Windows 上，安装后请打开一个新的终端。然后运行：
