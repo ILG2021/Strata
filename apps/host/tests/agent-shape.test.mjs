@@ -40,7 +40,7 @@ test('the profile adds a response-settings copy of each shapeable route (local, 
     local: [{ id: 'a', modelId: 'm', baseUrl: 'http://127.0.0.1:9001', context: 65536 }],
     connections: [
       { id: 'lan', name: 'LAN', baseUrl: 'http://192.168.1.9:8080/v1', protocol: 'openai-chat', apiKey: '', models: [{ id: 'x' }] },
-      { id: 'cloud', name: 'Cloud', baseUrl: 'https://api.deepseek.com', protocol: 'openai-chat', apiKey: 'k', models: [{ id: 'y' }] },
+      { id: 'cloud', name: 'Cloud', baseUrl: 'https://api.example.com', protocol: 'openai-chat', apiKey: 'k', models: [{ id: 'y' }] },
     ],
     proxyBase: 'http://127.0.0.1:8791/api/internal/agent-llm',
   });

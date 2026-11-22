@@ -389,7 +389,7 @@ def main(argv=None) -> int:
     ap.add_argument("--gguf-dir")
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--source", choices=S.SOURCES, default=None,
-                    help="where model files come from: auto (huggingface), huggingface, modelscope; "
+                    help="where model files come from: auto (huggingface) or huggingface; "
                          "same as STRATA_SOURCE")
     ap.add_argument("--setup", action="store_true")
     ap.add_argument("--no-start", action="store_true")
@@ -402,9 +402,7 @@ def main(argv=None) -> int:
     a, rest = ap.parse_known_args(argv)
     if rest:
         S.warn("not used on a Mac: " + " ".join(rest))
-    # setup.py hands a Mac over before its own parser runs, so --source has to be honoured here too:
-    # source_hint() recommends it on every platform, and a Mac that dropped it failed the download
-    # with the same unreachable host (#2363).
+    # setup.py hands a Mac over before its own parser runs, so --source has to be honoured here too (#2363).
     if a.source:
         os.environ["STRATA_SOURCE"] = a.source
     S.say("Strata on a Mac (Apple Silicon, Metal)")
@@ -579,7 +577,7 @@ def main(argv=None) -> int:
         S.say("  The MTP draft layer (speculative decoding) comes from the original Qwen checkpoint: only its ~5 GB of")
         S.say("  MTP tensors are downloaded.")
         S.run([sys.executable, str(ROOT / "tools" / "mtp_fetch.py"), "fetch", "--out", str(mtp)],
-              env={**env, "STRATA_SOURCE": S.model_source()})
+              env=env)
         S.run([sys.executable, str(ROOT / "tools" / "mtp_pack.py"), "--src", str(mtp), "--experts", "q2_0",
                "--out", str(mtp / "mtp-q2_0.gguf")], env=env)
     if use_mtp:

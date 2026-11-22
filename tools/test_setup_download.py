@@ -241,7 +241,7 @@ class NoRangeSupport(unittest.TestCase):
             self.assertEqual(srv.max_active, 1)
 
     def test_a_head_without_a_length_still_gets_the_connections(self):
-        """ModelScope's HEAD has no Content-Length (#1915): the length comes from a one-byte ranged GET, not 'unknown'."""
+        """A server whose HEAD has no Content-Length (#1915): the length comes from a one-byte ranged GET, not 'unknown'."""
         with small_pieces(), Server(length=False) as srv, tempfile.TemporaryDirectory() as d:
             code, out = run(srv, d)
             self.assertIsNone(code, out)

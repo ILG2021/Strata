@@ -39,16 +39,10 @@ tls.install()       # #3722: the operating system's certificates
 # repository no longer has it, reading stops (resolve_repo) unless STRATA_ALLOW_UNPINNED=1.
 PINNED_REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
 REVISION = os.environ.get("STRATA_MTP_REVISION") or PINNED_REVISION
-# #495: HF_ENDPOINT (a mirror, e.g. https://hf-mirror.com) serves the same revision; the SHA256 checks below still apply
+# #495: HF_ENDPOINT (a mirror) serves the same revision; the SHA256 checks below still apply
 HF_ENDPOINT = (os.environ.get("HF_ENDPOINT") or "").strip().rstrip("/") or "https://huggingface.co"
 REPO = HF_ENDPOINT + "/Qwen/Qwen3.8-Flash-Next/resolve/%s/" % REVISION
 PINNED = HF_ENDPOINT + "/Qwen/Qwen3.8-Flash-Next/resolve/%s/" % PINNED_REVISION   # SHA256's revision
-# STRATA_SOURCE=modelscope (setup's --source): the same checkpoint from ModelScope.  It serves the repository's current
-# files, not a pinned revision, so REPO and PINNED are one URL here: every tensor is still checked against the pinned
-# revision's SHA256 below, so a tensor that differs from it is caught, not used.
-if (os.environ.get("STRATA_SOURCE") or "").strip().lower() in ("ms", "modelscope"):
-    MS_ENDPOINT = (os.environ.get("MODELSCOPE_ENDPOINT") or "").strip().rstrip("/") or "https://www.modelscope.cn"
-    REPO = PINNED = MS_ENDPOINT + "/models/Qwen/Qwen3.8-Flash-Next/resolve/master/"
 DTYPE_BYTES = {"BF16": 2, "F16": 2, "F32": 4, "F8_E4M3": 1, "I64": 8, "I32": 4}
 BAD = 3                                             # `verify`'s exit code: a tensor is missing or corrupt
 
@@ -414,8 +408,7 @@ def fetch(out, only):
                 # continues after it with fewer connections (a link that drops 16 at once often holds 4)
                 net_fails += 1
                 if net_fails > 3:
-                    sys.exit("%s: the download keeps failing (%s). Check the connection and try again - what is downloaded is kept; "
-                             "if Hugging Face is slow to reach, `--source modelscope` reads the same files elsewhere" % (r["name"], e))
+                    sys.exit("%s: the download keeps failing (%s). Check the connection and try again - what is downloaded is kept" % (r["name"], e))
                 workers = max(4, workers // 2)
                 print("%s: %s - continuing with %d connections (try %d)" % (r["name"], e, workers, net_fails + 1), file=sys.stderr, flush=True)
                 time.sleep(min(5 * net_fails, 20))

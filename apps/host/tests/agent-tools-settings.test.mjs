@@ -113,9 +113,6 @@ test('profile: a keyed service is used only with its key saved; the key travels 
   const exa = buildProfile({ local: [], connections: [], tools: view('exa', 'exa-secret-key') });
   assert.equal(entriesOf(exa).find(x => x.id === 'web').config.searchProvider, 'exa');
   assert.equal(exa.env.STRATA_SEARCH_KEY, 'exa-secret-key'); assert.ok(!exa.patch.includes('exa-secret-key'));
-  const ds = buildProfile({ local: [], connections: [], tools: view('deepseek', 'ds-secret') });
-  assert.deepEqual(entriesOf(ds).find(x => x.id === 'web-search-deepseek').config, { apiKeyEnv: 'STRATA_SEARCH_KEY' });
-  assert.equal(entriesOf(ds).find(x => x.id === 'web').config.searchProvider, 'deepseek-official');
   assert.notEqual(noKey.signature, exa.signature, 'a changed choice restarts the agent');
 });
 

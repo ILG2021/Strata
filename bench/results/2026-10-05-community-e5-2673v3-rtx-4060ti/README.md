@@ -33,15 +33,15 @@ requests; they do not establish speed at long context or on other workloads.
 
 ## Models
 
-From ModelScope (`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`, master on 2026-10-05), SHA-256 matching the values
-ModelScope publishes; Q2_0's shard 1 also matched a copy from hf-mirror.com at the pinned revision (ed59f92):
+`ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (as of 2026-10-05); Q2_0's shard 1 matched the pinned revision (ed59f92).
+SHA-256:
 
 - `Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf` `69820c02ec7d0b45ef2ebb19d6620299db749fe2aded7f39f93c6b88b199b720`
 - `IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf` `4c1eb2ceb4915e1192f4f386021897bde56a97f40a0bb78bb86465e0f7d2aca3`
 - shard 2 (both): `316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113`
 
 Native packs by `tools/iq_pack.py` (as setup does on a CPU without AVX-512); the MTP draft layer by `tools/mtp_fetch.py`
-(the 31 MTP tensors of `Qwen/Qwen3.8-Flash-Next` from ModelScope, all matching the pinned SHA-256), `mtp_pack.py
+(the 31 MTP tensors of `Qwen/Qwen3.8-Flash-Next`, all matching the pinned SHA-256), `mtp_pack.py
 --experts q2_0` and `mtp_rt.py`, with `data/draft_vocab.bin` (cjk). Expert profile: the bundled
 `data/expert-profile.bin`.
 

@@ -396,10 +396,16 @@ class Catalog:
         own = self.strata.own_families()                # Qwen3.6 is listed for the app; the Terminal's launch list is Flash-Next's
         dsv41 = None
         for fam in self.strata.model_table(hw):
-            # Qwen3.6 is the app's; the Terminal lists it where it is the recommendation (an 8 GB card: setup's 8 GB settings)
+            # Qwen3.6 is the app's; the Terminal lists all its sizes where it is the recommendation (an 8 GB card: setup's 8 GB
+            # settings), and its UD-IQ3_S wherever else the engine runs it (NVIDIA / AMD: the Intel Arc engine refuses it)
+            only = None
             if fam["family"] in own and not own[fam["family"]].get("multi_file") and rec.get("family") != fam["family"]:
-                continue
+                if fam["family"] != "qwen36" or comp.engine_vendor not in ("nvidia", "amd"):
+                    continue
+                only = ("UD-IQ3_S",)
             for size in fam["sizes"]:
+                if only is not None and size["model"] not in only:
+                    continue
                 f = fit_on(size, hw.get("ram_gb"), vram)
                 if size.get("multi_file"):            # DeepSeek-V4.1-Flash: shared over every card (strata_control/dsv41_fit.py)
                     dsv41 = self.strata.dsv41_plan(hw, model=size["model"])

@@ -42,12 +42,7 @@ class FetchMtp(unittest.TestCase):
         with mock.patch.object(setup, "fail", lambda msg, hint=None: out.append((msg, hint)) or (_ for _ in ()).throw(SystemExit(1))):
             result, calls = self.run_with([1])
         self.assertEqual((result, len(calls)), (1, 3))
-        self.assertIn("modelscope", out[0][1])
-
-    def test_the_source_reaches_the_fetch(self):
-        with mock.patch.object(setup, "model_source", lambda: "modelscope"):
-            _, calls = self.run_with([0])
-        self.assertEqual(calls[0][1]["STRATA_SOURCE"], "modelscope")
+        self.assertIn("run setup again", out[0][1])
 
 
 class RunEndsWithSetup(unittest.TestCase):

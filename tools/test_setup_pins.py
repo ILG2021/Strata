@@ -121,7 +121,7 @@ class HuggingFacePins(unittest.TestCase):
                 raise not_found(req.full_url)
             return Response(b"model bytes", status=200)
 
-        # the pinned Hugging Face path itself (setup's --source huggingface; auto may pick ModelScope)
+        # the pinned Hugging Face path itself (setup's --source huggingface)
         with tempfile.TemporaryDirectory() as d, mock.patch.object(setup.urllib.request, "urlopen", urlopen),                 mock.patch.dict(setup.os.environ, {"STRATA_SOURCE": "huggingface", "STRATA_ALLOW_UNPINNED": "1"}),                 mock.patch.object(setup, "_unpinned_said", []):
             dst = Path(d) / "m.gguf"
             _, out = quiet(setup.download, setup.FAMILIES["qwen"]["mmproj_hf"] + "m.gguf", dst)
@@ -178,12 +178,12 @@ class HuggingFacePins(unittest.TestCase):
         with mock.patch.dict(setup.os.environ, {}, clear=False):
             setup.os.environ.pop("HF_ENDPOINT", None)
             self.assertEqual(setup.hf(repo), f"https://huggingface.co/{repo}/resolve/{setup.HF_REVISIONS[repo]}/")
-            for value in ("https://hf-mirror.com", "https://hf-mirror.com/", " https://hf-mirror.com/ "):
+            for value in ("https://hf.mirror.example", "https://hf.mirror.example/", " https://hf.mirror.example/ "):
                 setup.os.environ["HF_ENDPOINT"] = value
                 url = setup.hf(repo)
-                self.assertEqual(url, f"https://hf-mirror.com/{repo}/resolve/{setup.HF_REVISIONS[repo]}/")
+                self.assertEqual(url, f"https://hf.mirror.example/{repo}/resolve/{setup.HF_REVISIONS[repo]}/")
                 self.assertRegex(url, SHA)
-                self.assertEqual(setup.hf_unpinned(url + "x.gguf"), f"https://hf-mirror.com/{repo}/resolve/main/x.gguf")
+                self.assertEqual(setup.hf_unpinned(url + "x.gguf"), f"https://hf.mirror.example/{repo}/resolve/main/x.gguf")
             setup.os.environ["HF_ENDPOINT"] = ""
             self.assertEqual(setup.hf_endpoint(), "https://huggingface.co")
 
@@ -191,9 +191,9 @@ class HuggingFacePins(unittest.TestCase):
         import importlib
         import mtp_fetch
         try:
-            with mock.patch.dict(mtp_fetch.os.environ, {"HF_ENDPOINT": "https://hf-mirror.com/"}):
+            with mock.patch.dict(mtp_fetch.os.environ, {"HF_ENDPOINT": "https://hf.mirror.example/"}):
                 importlib.reload(mtp_fetch)
-                self.assertTrue(mtp_fetch.REPO.startswith("https://hf-mirror.com/Qwen/Qwen3.8-Flash-Next/resolve/"))
+                self.assertTrue(mtp_fetch.REPO.startswith("https://hf.mirror.example/Qwen/Qwen3.8-Flash-Next/resolve/"))
                 self.assertRegex(mtp_fetch.REPO, SHA)
                 self.assertTrue(mtp_fetch.pinned())                 # the tensors' SHA-256 checks still apply
         finally:
@@ -204,7 +204,7 @@ class HuggingFacePins(unittest.TestCase):
         # #495: where setup expects the model files, and how to give it files downloaded by hand
         from test_setup_golden import PROFILES, install
         ram, found = PROFILES["96GB-1x16GB"]
-        with mock.patch.dict(setup.os.environ, {"HF_ENDPOINT": "https://hf-mirror.com"}):
+        with mock.patch.dict(setup.os.environ, {"HF_ENDPOINT": "https://hf.mirror.example"}):
             code, out, cfg, _ = install(ram, found, ["--family", "qwen", "--model", "IQ3_XXS", "--no-start"])
         self.assertEqual(code, 0)
         text = out.replace("\\", "/")
@@ -212,7 +212,7 @@ class HuggingFacePins(unittest.TestCase):
         self.assertIn("put them here with their original names (Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf",
                       text)
         self.assertIn("--gguf-dir", text)
-        self.assertIn("Downloading from https://hf-mirror.com (HF_ENDPOINT)", text)
+        self.assertIn("Downloading from https://hf.mirror.example (HF_ENDPOINT)", text)
 
 
 @unittest.skipIf(setup.is_arm64() and sys.platform.startswith("linux"),

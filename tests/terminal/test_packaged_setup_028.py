@@ -42,10 +42,10 @@ class PackagedSetupWithoutCMake(unittest.TestCase):
 
 
 class InstallForwardsSetupOptions(unittest.TestCase):
-    """#4188: `strata install --source modelscope --family qwen ...` was refused by strata's own parser."""
+    """#4188: `strata install --source huggingface --family qwen ...` was refused by strata's own parser."""
 
     def test_the_options_of_setup_go_behind_a_double_dash_and_update_stays_strata_s(self):
-        self.assertEqual(cli._install_argv(["install", "--source", "modelscope", "--yes"]), ["install", "--", "--source", "modelscope", "--yes"])
+        self.assertEqual(cli._install_argv(["install", "--source", "huggingface", "--yes"]), ["install", "--", "--source", "huggingface", "--yes"])
         self.assertEqual(cli._install_argv(["install", "--family", "qwen", "--update"]), ["install", "--update", "--", "--family", "qwen"])
         self.assertEqual(cli._install_argv(["install"]), ["install", "--"])
         self.assertEqual(cli._install_argv(["install", "-h"]), ["install", "-h"])
@@ -54,7 +54,7 @@ class InstallForwardsSetupOptions(unittest.TestCase):
 
     def test_the_parser_hands_all_of_it_to_setup_in_order(self):
         ap = cli.parser()
-        for argv in (["install", "--source", "modelscope", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"],
+        for argv in (["install", "--source", "huggingface", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"],
                      ["install", "--family", "qwen", "--yes"], ["install", "--yes"]):
             a, extras = ap.parse_known_args(cli._install_argv(argv))
             self.assertEqual(extras, [], argv)
@@ -66,11 +66,11 @@ class InstallForwardsSetupOptions(unittest.TestCase):
             calls = []
             with mock.patch.dict(os.environ, {"STRATA_INSTALL_DIR": tmp}), \
                     mock.patch.object(subprocess, "call", side_effect=lambda argv, **kw: calls.append(argv) or 0):
-                code = cli.main(["install", "--source", "modelscope", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"])
+                code = cli.main(["install", "--source", "huggingface", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"])
                 self.assertEqual(code, 0)
                 code = cli.main(["install", "--update", "--yes"])
                 self.assertEqual(code, 0)
-        self.assertEqual(calls[0][2:], ["--setup", "--source", "modelscope", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"])
+        self.assertEqual(calls[0][2:], ["--setup", "--source", "huggingface", "--family", "qwen", "--model", "IQ3_XXS", "--context", "32k", "--yes"])
         self.assertEqual(calls[1][2:], ["--update", "--yes"])
 
 

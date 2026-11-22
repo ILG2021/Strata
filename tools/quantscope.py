@@ -4,14 +4,14 @@
 """quantscope: find the real quantization of a model without downloading it.
 
 Reads only file headers (a few MB per file, via HTTP range requests) of GGUF or safetensors
-models on ModelScope, Hugging Face, any URL, or local disk, and reports the actual storage
+models on Hugging Face, any URL, or local disk, and reports the actual storage
 type and bits per weight of every tensor group (routed experts, attention, embeddings, ...).
 File names such as "IQ4_XS" or "Q4_K_XL" are recipe labels; the header is the ground truth.
 
 Examples:
-  python quantscope.py ms:unsloth/Qwen3.8-Flash-Next-GGUF              # list variants
-  python quantscope.py ms:unsloth/Qwen3.8-Flash-Next-GGUF UD-Q4_K_XL   # one variant
-  python quantscope.py ms:unsloth/Qwen3.8-Flash-Next-GGUF --all        # compare all variants
+  python quantscope.py hf:unsloth/Qwen3.8-Flash-Next-GGUF              # list variants
+  python quantscope.py hf:unsloth/Qwen3.8-Flash-Next-GGUF UD-Q4_K_XL   # one variant
+  python quantscope.py hf:unsloth/Qwen3.8-Flash-Next-GGUF --all        # compare all variants
   python quantscope.py hf:Qwen/Qwen3-30B-A3B-GPTQ-Int4
   python quantscope.py models/model-00001-of-00003.gguf
 """
@@ -32,8 +32,6 @@ from collections import defaultdict
 # ---------------------------------------------------------------- sources --------------------
 
 HUBS = {
-    "ms": ("https://modelscope.cn/api/v1/models/{repo}/repo/files?Recursive=true",
-           "https://modelscope.cn/models/{repo}/resolve/master/{path}"),
     "hf": ("https://huggingface.co/api/models/{repo}/tree/main?recursive=true",
            "https://huggingface.co/{repo}/resolve/main/{path}"),
 }
@@ -79,21 +77,15 @@ def list_hub(kind: str, repo: str) -> list[Source]:
     list_url, file_url = HUBS[kind]
     data = json.loads(http(list_url.format(repo=repo)))
     out = []
-    if kind == "ms":
-        for f in data["Data"]["Files"]:
-            if f.get("Type") == "blob":
-                out.append(Source(f["Path"], int(f.get("Size") or 0),
-                                  url=file_url.format(repo=repo, path=f["Path"])))
-    else:
-        for f in data:
-            if f.get("type") == "file":
-                size = int((f.get("lfs") or {}).get("size") or f.get("size") or 0)
-                out.append(Source(f["path"], size, url=file_url.format(repo=repo, path=f["path"])))
+    for f in data:
+        if f.get("type") == "file":
+            size = int((f.get("lfs") or {}).get("size") or f.get("size") or 0)
+            out.append(Source(f["path"], size, url=file_url.format(repo=repo, path=f["path"])))
     return out
 
 
 def resolve(spec: str) -> list[Source]:
-    m = re.match(r"^(ms|hf):([^/]+/[^/:]+)$", spec)
+    m = re.match(r"^(hf):([^/]+/[^/:]+)$", spec)
     if m:
         return list_hub(m.group(1), m.group(2))
     if spec.startswith(("http://", "https://")):
@@ -354,7 +346,7 @@ def scan(label: str, files: list[Source], meta_config: dict | None) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("source", help="ms:owner/repo, hf:owner/repo, URL, file or directory")
+    parser.add_argument("source", help="hf:owner/repo, URL, file or directory")
     parser.add_argument("variant", nargs="?", help="variant name or glob (e.g. UD-Q4_K_XL)")
     parser.add_argument("--all", action="store_true", help="scan and compare every variant")
     args = parser.parse_args()
@@ -362,7 +354,7 @@ def main() -> None:
     files = [f for f in resolve(args.source)
              if f.name.endswith((".gguf", ".safetensors", ".ninfer"))]
     config = None
-    for f in resolve(args.source) if args.source.startswith(("ms:", "hf:")) else []:
+    for f in resolve(args.source) if args.source.startswith("hf:") else []:
         if f.name == "config.json":
             config = json.loads(http(f.url))
             if config.get("quantization_config"):

@@ -647,7 +647,7 @@ class UpdateFlow(unittest.TestCase):
 
 class Source(unittest.TestCase):
     """setup.py hands a Mac over before its own parser runs, so the Mac parser has to know --source:
-    source_hint() recommends it on every platform (#2363)."""
+    (#2363)."""
 
     def test_the_source_flag_reaches_strata_source(self):
         env = mock.patch.dict(os.environ, {}, clear=False)
@@ -665,8 +665,8 @@ class Source(unittest.TestCase):
                 mock.patch.object(setup, "say", lambda *a, **k: None), \
                 mock.patch.object(setup, "ok", lambda *a, **k: None), \
                 mock.patch.object(setup, "step", lambda *a, **k: None):
-            M.main(["--source", "modelscope", "--yes", "--check", "--data-dir", tmp])
-        self.assertEqual(os.environ.get("STRATA_SOURCE"), "modelscope")
+            M.main(["--source", "huggingface", "--yes", "--check", "--data-dir", tmp])
+        self.assertEqual(os.environ.get("STRATA_SOURCE"), "huggingface")
         self.assertFalse([w for w in warnings if "--source" in w],
                          f"--source was not used: {warnings}")
 

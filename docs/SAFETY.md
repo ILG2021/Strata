@@ -45,11 +45,10 @@ Like any download, each connection below shows the other side your IP address an
 | What | Where it goes | When |
 | --- | --- | --- |
 | Model files, the picture reader, the speed-up layer (MTP) | huggingface.co, or the mirror in `HF_ENDPOINT` if you set one | When you install a model |
-| The same files from ModelScope, for PCs that cannot reach Hugging Face | modelscope.cn | Only if you ask for it (`--source modelscope`). Strata never switches to it by itself |
 | Engine, Terminal and Control updates | The signed feed on GitHub Releases of Niko1221/Strata | When you install an engine, press **Update engine** or **Check for updates**, or run `strata update`; the DeepSeek engine also on `strata launch` (below). Opening **Settings, Engine** does not connect: it shows the result of your last check |
 | App updates | `latest.json` on the same GitHub Releases, through Tauri's updater | When you press **Check for updates** or **Update Strata** |
 | llama.cpp source code (a fixed commit) | github.com/ggml-org/llama.cpp | During a model install, if it is not on your PC yet. Strata uses only its model-preparation scripts |
-| Web search and web pages | DuckDuckGo, with Bing as the second source; or Exa, Perplexity or DeepSeek if you save a key for them. Any page the agent is asked to open goes to that page's site | When the agent uses its search or "open web pages" tool. In Manual mode it asks you first, once per chat |
+| Web search and web pages | DuckDuckGo, with Bing as the second source; or Exa or Perplexity if you save a key for them. Any page the agent is asked to open goes to that page's site | When the agent uses its search or "open web pages" tool. In Manual mode it asks you first, once per chat |
 | Outside model services | The service you add (OpenAI, Anthropic, OpenRouter, a server on your network and others) | Only for chats with that model, and only after you add its key |
 | Cloudflare tunnel | Cloudflare, through the `cloudflared` program | Only while you have the tunnel on, and Strata makes an API key for it unless you pass `--no-api-key` (then it warns that anyone who finds the address can use your model) |
 | Tailscale, local network | Not Strata's traffic. Strata only reads Tailscale's status and shows the address | Only if you choose that access in `strata launch` |
@@ -131,9 +130,6 @@ size stops it before the download starts.
   the check. It is off by default, and setup says so when it is set.
 - Starting a model does not check its files, and running setup again for a model you have does not download or hash them
   again. A file installed before these hashes existed is kept as it is.
-- Files from ModelScope are checked against the same fixed SHA-256. ModelScope serves a repository's current files, so a file
-  it has changed fails the check. A file without a pin is checked against the hash ModelScope publishes, and setup warns
-  when it publishes none.
 - The app installs these models by running the same setup, so it has the same checks. The app's host also keeps a short
   starter list of its own (`apps/host/server/real-model-catalog.mjs`). It is for display only. The host refuses to download
   from it, because its files have no hash, and says that models come from the Models screen.

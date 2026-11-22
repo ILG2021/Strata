@@ -4,13 +4,13 @@ Reads only the files' headers (a few MB each, by HTTP range requests for a remot
 real storage of every weight group (bits per weight, quantization types), then compares the routed experts and the
 sizes with the files setup installs (data/gguf_fingerprints.json):
 
-    python tools/strata_inspect.py ms:ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF          # list the variants
-    python tools/strata_inspect.py ms:ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF IQ3_S    # one variant
-    python tools/strata_inspect.py ms:unsloth/Qwen3.8-Flash-Next-GGUF UD-Q2_K_XL
+    python tools/strata_inspect.py hf:ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF          # list the variants
+    python tools/strata_inspect.py hf:ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF IQ3_S    # one variant
+    python tools/strata_inspect.py hf:unsloth/Qwen3.8-Flash-Next-GGUF UD-Q2_K_XL
     python tools/strata_inspect.py D:/models/my-copy-00001-of-00002.gguf                  # a local file or folder
     python tools/strata_inspect.py https://example.com/x-00001-of-00002.gguf              # one URL (that shard only)
 
-ms: is ModelScope, hf: Hugging Face (HF_ENDPOINT is honoured).  setup.py --inspect runs the same.
+hf: is Hugging Face (HF_ENDPOINT is honoured).  setup.py --inspect runs the same.
     python tools/strata_inspect.py --fingerprints data/gguf_fingerprints.json             # remake the table
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ FINGERPRINTS = ROOT / "data" / "gguf_fingerprints.json"
 ARCH = "qwen4exp"                                       # Qwen3.8-Flash-Next's general.architecture
 PREVIEW_ARCHS = {"qwen35moe": "Qwen3.6-35B-A3B"}         # model families Strata knows but does not run yet (T0)
 
-# the files setup installs: (family, model, ModelScope repository, file name prefix) - for --fingerprints
+# the files setup installs: (family, model, Hugging Face repository, file name prefix) - for --fingerprints
 KNOWN = [
     ("qwen", "Q2_0", "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF", "Q2_0/"),
     ("qwen", "IQ2_XS", "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF", "IQ2_XS/"),
@@ -134,7 +134,7 @@ def make_fingerprints(out: Path) -> None:
     listing, table = {}, {}
     for fam, model, repo, prefix in KNOWN:
         if repo not in listing:
-            listing[repo] = qs.list_hub("ms", repo)
+            listing[repo] = qs.list_hub("hf", repo)
         files = sorted((f for f in listing[repo] if f.name.startswith(prefix) and f.name.endswith(".gguf")),
                        key=lambda f: f.name)
         table[f"{fam}/{model}"] = {**fingerprint(*read_headers(files)), "files": [f.name for f in files], "repo": repo}
@@ -149,7 +149,7 @@ def make_fingerprints(out: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("source", nargs="?", help="ms:owner/repo, hf:owner/repo, a URL, a .gguf file or a folder")
+    ap.add_argument("source", nargs="?", help="hf:owner/repo, a URL, a .gguf file or a folder")
     ap.add_argument("variant", nargs="?", help="a variant name or glob (e.g. IQ3_S, UD-Q2_K_XL)")
     ap.add_argument("--fingerprints", metavar="OUT", help="read the files setup installs and write the table")
     a = ap.parse_args()

@@ -252,7 +252,7 @@ class Misbehaving(DownloadCase):
         self.tmp.joinpath("model.gguf.part.chunks").write_text(
             json.dumps({"v": 1, "total": SIZE, "chunk": PIECE, "done": [[0, 10]]}), encoding="utf-8")
         self.tmp.joinpath("model.gguf.part.src").write_text(
-            json.dumps({"url": "https://www.modelscope.cn/models/x/resolve/master/model.gguf", "etag": None}), encoding="utf-8")
+            json.dumps({"url": "https://mirror.example/models/x/resolve/master/model.gguf", "etag": None}), encoding="utf-8")
         self.run_download(url)
         self.assertGood()                                      # the 0xaa pieces were not trusted
 

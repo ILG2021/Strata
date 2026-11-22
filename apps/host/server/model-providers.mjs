@@ -9,7 +9,6 @@ import { makePrivate } from './private-file.mjs';
 export const PROVIDER_CATALOG = [
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', protocol: 'openai-responses' },
   { id: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1', protocol: 'anthropic' },
-  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', protocol: 'openai-chat' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', protocol: 'openai-chat' },
   { id: 'baseten', name: 'Baseten', baseUrl: 'https://inference.baseten.co/v1', protocol: 'openai-chat' },
   { id: 'cerebras', name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', protocol: 'openai-chat' },
@@ -17,16 +16,11 @@ export const PROVIDER_CATALOG = [
   { id: 'google', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', protocol: 'openai-chat' },
   { id: 'groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', protocol: 'openai-chat' },
   { id: 'huggingface', name: 'Hugging Face', baseUrl: 'https://router.huggingface.co/v1', protocol: 'openai-chat' },
-  { id: 'minimax', name: 'MiniMax', baseUrl: 'https://api.minimax.io/v1', protocol: 'openai-chat' },
   { id: 'mistral', name: 'Mistral', baseUrl: 'https://api.mistral.ai/v1', protocol: 'openai-chat' },
-  { id: 'moonshotai', name: 'Moonshot AI · Kimi', baseUrl: 'https://api.moonshot.ai/v1', protocol: 'openai-chat' },
   { id: 'nvidia', name: 'NVIDIA', baseUrl: 'https://integrate.api.nvidia.com/v1', protocol: 'openai-chat' },
-  { id: 'qwen', name: 'Qwen · Model Studio', baseUrl: '', protocol: 'openai-chat', baseUrlHint: 'Paste the OpenAI compatible base URL for your workspace and region from Model Studio.' },
-  { id: 'qwen-us', name: 'Qwen · US', baseUrl: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1', protocol: 'openai-chat' },
   { id: 'together', name: 'Together AI', baseUrl: 'https://api.together.ai/v1', protocol: 'openai-chat' },
   { id: 'vercel-ai-gateway', name: 'Vercel AI Gateway', baseUrl: 'https://ai-gateway.vercel.sh/v1', protocol: 'openai-chat' },
   { id: 'xai', name: 'xAI', baseUrl: 'https://api.x.ai/v1', protocol: 'openai-responses' },
-  { id: 'zai', name: 'Z.AI', baseUrl: 'https://api.z.ai/api/paas/v4', protocol: 'openai-chat' },
 ];
 const PROTOCOLS = ['openai-chat', 'openai-responses', 'anthropic'];
 const fail = message => { throw new Error(message); };
@@ -155,7 +149,7 @@ export function createModelProviders({ directory, changed = () => {}, fetchImpl 
       ? { model: model.id, messages, system: systemPrompt, max_tokens: 8192, stream: true }
       : protocol === 'openai-responses'
         ? { model: model.id, input: messages, instructions: systemPrompt, stream: true, store: false }
-        : { model: model.id, messages: [...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []), ...messages], stream: true, ...(['openai', 'deepseek', 'openrouter', 'google', 'moonshotai'].includes(connection.provider) ? { stream_options: { include_usage: true } } : {}) };
+        : { model: model.id, messages: [...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []), ...messages], stream: true, ...(['openai', 'openrouter', 'google'].includes(connection.provider) ? { stream_options: { include_usage: true } } : {}) };
     // Match the native composer's effort names. Unknown support and other protocols keep provider defaults.
     const choice = typeof thinking === 'string' ? thinking.toLowerCase() : '';
     if (protocol === 'openai-chat' && (model.reasoning ?? knownThinks(connection, model.id)) === true && ['off', 'low', 'medium', 'high', 'max'].includes(choice)) {

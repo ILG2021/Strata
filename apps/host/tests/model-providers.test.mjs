@@ -79,7 +79,7 @@ test('every API key preset discovers and streams with its configured protocol', 
   const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'strata-presets-'));
   t.after(async () => { await mock.close(); rmSync(directory, { recursive: true, force: true }); });
   const service = createModelProviders({ directory });
-  assert.ok(PROVIDER_CATALOG.length >= 20);
+  assert.ok(PROVIDER_CATALOG.length >= 14);
   assert.equal(new Set(PROVIDER_CATALOG.map(p => p.id)).size, PROVIDER_CATALOG.length);
   for (const preset of PROVIDER_CATALOG) {
     if (preset.baseUrl) assert.equal(normalizeBaseUrl(preset.baseUrl), preset.baseUrl);
@@ -93,7 +93,7 @@ test('every API key preset discovers and streams with its configured protocol', 
     const request = mock.requests.at(-1);
     if (preset.protocol === 'anthropic') assert.equal(request.headers['x-api-key'], 'test-key');
     else assert.equal(request.headers.authorization, 'Bearer test-key');
-    if (preset.protocol === 'openai-chat' && !['deepseek','openrouter','google','moonshotai'].includes(preset.id)) assert.equal(request.body.stream_options, undefined, 'optional usage parameter is not assumed for newly added providers');
+    if (preset.protocol === 'openai-chat' && !['openrouter','google'].includes(preset.id)) assert.equal(request.body.stream_options, undefined, 'optional usage parameter is not assumed for newly added providers');
   }
-  assert.throws(() => service.save({ kind: 'provider', provider: 'qwen', apiKey: 'test-key', models: [{ id: 'test' }] }), /full http/);
+  assert.throws(() => service.save({ kind: 'custom', protocol: 'openai-chat', name: 'No address', apiKey: 'test-key', models: [{ id: 'test' }] }), /full http/);
 });

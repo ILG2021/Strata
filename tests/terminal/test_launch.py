@@ -112,6 +112,10 @@ class CatalogRules(unittest.TestCase):
                 if r.family == "deepseek41":                           # its sizes are in MULTI_FILE_FAMILIES (shards + shared files), not in MODELS
                     self.assertAlmostEqual(r.download_gb, {"UD-Q8_K_XL": 508.4, "IST-DAS-2.00bpw": 256.8, "IST-DAS-2.25bpw": 273.8, "IST-DAS-1.75bpw": 239.3, "ISTA-DAS-Coder": 190.7, "UD-IQ1_S": 241.0, "UD-IQ1_M": 258.4}[r.model], delta=0.1)
                     continue
+                if r.family == "qwen36":                               # its sizes are in OWN_PATH_FAMILIES, not in MODELS: the UD-IQ3_S download
+                    self.assertEqual(r.model, "UD-IQ3_S")
+                    self.assertAlmostEqual(r.download_gb, 15.3, delta=0.2)
+                    continue
                 self.assertAlmostEqual(r.download_gb, models[r.model]["download_gb"])
             rec = [r for r in rows if r.recommended]
             self.assertEqual([(r.family, r.model) for r in rec], [("qwen", "IQ3_S")])      # 64 + 12 GB: the 64 GB tier
@@ -357,7 +361,10 @@ class RunConfig(unittest.TestCase):
             self.assertEqual((rec["family"], rec["model"], rec["context"]), ("qwen36", "UD-IQ3_S", 131072))
             rows = [r for r in cat.rows(hw8) if r.family == "qwen36"]
             self.assertTrue(any(r.model == "UD-IQ3_S" and r.recommended for r in rows))
-            self.assertFalse([r for r in catalog(HW_12).rows(HW_12) if r.family == "qwen36"])   # a 12 GB card: as before
+            # a 12 GB card: Qwen3.6 is not the recommendation, its UD-IQ3_S alone is listed (launch menu option)
+            rows12 = [r for r in catalog(HW_12).rows(HW_12) if r.family == "qwen36"]
+            self.assertEqual([r.model for r in rows12], ["UD-IQ3_S"])
+            self.assertFalse(rows12[0].recommended)
 
     def test_tune_words(self):
         self.assertEqual(tune_words({"outcome": "improved", "gain_pct": 4.2})[0], "faster")
