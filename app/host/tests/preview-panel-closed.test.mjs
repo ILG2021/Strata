@@ -115,6 +115,6 @@ test('every way the Chat screen closes the panel goes through closePreviewPanel'
   const chat = readFileSync(here('../src/screens/Chat.tsx'), 'utf8');
   assert.match(chat, /function closePreviewPanel\(\) \{ setPreviewPanelClosed\(session\?\.id\); \}/);
   const closes = chat.match(/onClose=\{\(\) => \{? ?setSelectedPreview\(null\)[^}]*\}?\}/g) ?? [];
-  assert.equal(closes.length, 5);
+  assert.equal(closes.length, 4);
   for (const c of closes) assert.match(c, /closePreviewPanel\(\)/, c);
 });

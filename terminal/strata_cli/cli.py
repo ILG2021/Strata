@@ -813,8 +813,8 @@ def _effective(cfg: dict, saved: dict | None, cli: argparse.Namespace | None = N
             raise ProfileError("parallel override conflicts with --batch/--slots in run config args")
     if values["batch_groups"] is not None and "--batch-groups" in cfg["args"]:
         raise ProfileError("batch_groups override conflicts with --batch-groups in run config args")
-    if values["offline"] and (cfg.get("mcp_servers") or cfg.get("before_load")):
-        raise ProfileError("offline serving requires MCP servers and before_load to be absent")
+    if values["offline"] and cfg.get("before_load"):
+        raise ProfileError("offline serving requires before_load to be absent")
     return values, origins
 
 

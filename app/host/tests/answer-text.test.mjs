@@ -8,7 +8,6 @@ async function loadTs(path) {
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 const { tidyAnswer } = await loadTs('../src/lib/answer-text.ts');
-const { appendText } = await loadTs('../src/lib/deliverables.ts').catch(() => ({}));
 
 test('a literal <analysis> or <think> wrapper is removed, the words stay', () => {
   assert.equal(tidyAnswer('<analysis>The answer is 4.'), 'The answer is 4.');
@@ -35,9 +34,8 @@ test('streaming: a tag that arrives in pieces is removed once it is complete', (
   assert.equal(lead, 'CEDAR-742');
 });
 
-test('the store applies it to the answer, the ordered pieces and the Markdown export', async () => {
+test('the store applies it to the answer and the Markdown export', async () => {
   const store = await readFile(new URL('../src/lib/store.ts', import.meta.url), 'utf8');
   assert.match(store, /tidyAnswer\(m\.content\+text\)/);   // applyDelta, which the queued pieces go through
   assert.match(store, /m\.role === 'assistant' \? tidyAnswer\(m\.content\) : m\.content\)/);
-  assert.match(await readFile(new URL('../src/lib/deliverables.ts', import.meta.url), 'utf8'), /tidyAnswer\(last\.text \+ text\)/);
 });

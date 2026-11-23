@@ -49,38 +49,37 @@ async function load(seed = {}) {
 test('with nothing set, a new chat starts exactly as it did before the setting existed', async () => {
   const { store } = await load();
   const chat = store.newSession();
-  assert.deepEqual(chat.preferences.mode, 'manual', 'the composer shows Manual for a chat with no mode');
+  assert.equal(chat.preferences.mode, undefined, 'a new chat has no permission mode');
   assert.deepEqual(chat.preferences.thinking, 'Medium', 'the composer shows Medium for a chat with no effort');
   assert.deepEqual(chat.preferences.thinkingBudget, 0, 'the composer shows No limit for a chat with no budget');
 });
 
 test('a chosen default is what the next conversation starts with, and is remembered', async () => {
   const { store, memory } = await load();
-  store.setChatDefaults({ mode: 'bypass', thinking: 'High', thinkingBudget: 8192 });
+  store.setChatDefaults({ thinking: 'High', thinkingBudget: 8192 });
   const chat = store.newSession();
-  assert.deepEqual(chat.preferences.mode, 'bypass');
   assert.deepEqual(chat.preferences.thinking, 'High');
   assert.deepEqual(chat.preferences.thinkingBudget, 8192);
-  assert.deepEqual(JSON.parse(memory.get(PREFS_KEY)).chatDefaults, { mode: 'bypass', thinking: 'High', thinkingBudget: 8192 }, 'the choice is saved with the other preferences');
+  assert.deepEqual(JSON.parse(memory.get(PREFS_KEY)).chatDefaults, { thinking: 'High', thinkingBudget: 8192 }, 'the choice is saved with the other preferences');
 
   // A second load reads it back from storage, so it survives a restart.
   const again = await load({ [PREFS_KEY]: memory.get(PREFS_KEY), [SESSION_KEY]: memory.get(SESSION_KEY) });
-  assert.deepEqual(again.store.newSession().preferences.mode, 'bypass', 'after a restart a new chat still starts in Bypass');
+  assert.deepEqual(again.store.newSession().preferences.thinking, 'High', 'after a restart a new chat still starts with High');
 });
 
 test('a default changes new chats only: a conversation already started keeps its own choice', async () => {
   const { store } = await load();
   const before = store.newSession();
-  store.setChatDefaults({ mode: 'plan' });
+  store.setChatDefaults({ thinking: 'Low' });
   const after = store.newSession();
-  assert.deepEqual(before.preferences.mode, 'manual', 'the chat that existed keeps what it had');
-  assert.deepEqual(after.preferences.mode, 'plan', 'the next one takes the new default');
+  assert.deepEqual(before.preferences.thinking, 'Medium', 'the chat that existed keeps what it had');
+  assert.deepEqual(after.preferences.thinking, 'Low', 'the next one takes the new default');
 });
 
 test('a stored value the composer cannot offer falls back instead of showing a dead choice', async () => {
   const { store } = await load({ [PREFS_KEY]: JSON.stringify({ chatDefaults: { mode: 'everything-goes', thinking: 'Enormous', thinkingBudget: 999999 } }) });
   const chat = store.newSession();
-  assert.deepEqual(chat.preferences.mode, 'manual');
+  assert.equal(chat.preferences.mode, undefined);
   assert.deepEqual(chat.preferences.thinking, 'Medium');
   assert.deepEqual(chat.preferences.thinkingBudget, 0);
 });

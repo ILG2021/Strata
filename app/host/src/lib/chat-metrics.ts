@@ -2,13 +2,12 @@ import type { MonitorState, Session } from './types';
 
 export function chatMetrics(session:Session|null, monitor:MonitorState|null, configuredContext?:number, now:number=Date.now()) {
   const messages=session?.messages??[];
-  const replies=messages.filter(m=>m.role==='assistant'&&!m.timeSkipId);
+  const replies=messages.filter(m=>m.role==='assistant');
   const latest=[...replies].reverse().find(m=>m.inputTokens!==undefined);
-  const remote=replies.at(-1)?.remoteModel===true;
   const working=replies.some(m=>m.streaming);
   // The Monitor's reading belongs to this chat when it names it, and also while this chat is the one working: a goal or an agent runs under its own
   // session ids, so matching on the chat id alone left the numbers frozen during a goal.
-  const active=!remote&&!!session&&!!monitor&&(monitor.context?.sessionId===session.id||(working&&['reading','thinking','generating'].includes(monitor.phase)));
+  const active=!!session&&!!monitor&&(monitor.context?.sessionId===session.id||(working&&['reading','thinking','generating'].includes(monitor.phase)));
   // One source: what the context held after the last reply (the engine's own count for that request); the monitor's live figure only while a reply streams.
   const finished=latest?(latest.contextUsed??latest.inputTokens!+(latest.tokens??0)):null;
   const liveUsed=active&&Number.isFinite(monitor!.context.usedTokens)&&monitor!.context.usedTokens>0?monitor!.context.usedTokens:null;
@@ -17,7 +16,7 @@ export function chatMetrics(session:Session|null, monitor:MonitorState|null, con
   // figure belongs to the request in flight (a small one between two tools read as 1%), and `finished` to an earlier reply.
   const turnUsed=replies.find(m=>m.streaming&&Number.isFinite(m.contextUsed)&&m.contextUsed!>0)?.contextUsed??null;
   const used=live?(turnUsed??liveUsed??finished):(finished??liveUsed);
-  const max=remote?(replies.at(-1)?.contextMax||null):configuredContext??(active?monitor!.context.maxTokens:latest?.contextMax??null);
+  const max=configuredContext??(active?monitor!.context.maxTokens:latest?.contextMax??null);
   const streaming=replies.find(m=>m.streaming);
   // Answer speed: everything the model generated over its decode time. While a reply streams it is that reply's; after it, the LAST reply's own
   // (never an older reply's number under the words "last reply").

@@ -271,18 +271,6 @@ test('packaged: no update while a model is loaded; calibration is still refused'
   } finally { await f.native.close(); f.cleanup(); }
 });
 
-test('packaged: "Update Strata" updates Control through the feed, then the app through the shell', async () => {
-  const f = fixture({ withApp: true });
-  try {
-    await f.native.refresh(true);
-    const job = await finish(f.native, f.native.operation('update-strata', {}).id);
-    assert.equal(job.state, 'done', job.error);
-    assert.deepEqual(f.calls.map(c => c[0]), ['update', 'app-install']);
-    assert.deepEqual(f.calls[0], ['update', false, true]);
-    assert.match(job.summary, /app update is installed\. Strata will restart/);
-  } finally { await f.native.close(); f.cleanup(); }
-});
-
 test('packaged: an app update that ends the app is recorded as finished by the new version, not as an interrupted operation', async () => {
   const before = process.env.STRATA_APP_VERSION;
   process.env.STRATA_APP_VERSION = '0.2.2';

@@ -241,8 +241,7 @@ class Document(unittest.TestCase):
 
 
 class Publishing(unittest.TestCase):
-    """The scripts and the workflow that publish the images (docker/publish.sh, docker/fetch-engines.py, .github/workflows/docker-images.yml)."""
-    WORKFLOW = ROOT.parent / ".github" / "workflows" / "docker-images.yml"
+    """The scripts and the workflow that publish the images (docker/publish.sh, docker/fetch-engines.py; this fork has no image workflow)."""
 
     @unittest.skipIf(SH is None, "needs sh")
     def test_publish_script_parses_and_defaults_to_not_pushing(self):
@@ -287,21 +286,6 @@ class Publishing(unittest.TestCase):
         doc = (ROOT.parent / "docs" / "DOCKER.md").read_text(encoding="utf-8")
         self.assertEqual(doc.count("docker build -t strata:src"), doc.count("--build-arg STRATA_COMMIT=$(git rev-parse HEAD)"))
         self.assertIn("/data/install/", (ROOT.parent / "tools" / "docker" / "Dockerfile.src.dockerignore").read_text(encoding="utf-8"))
-
-    def test_workflow_is_manual_and_pushes_only_on_request(self):
-        data = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))
-        triggers = data.get("on", data.get(True))            # YAML 1.1 reads a bare `on` as True
-        self.assertEqual(set(triggers), {"workflow_dispatch"})
-        inputs = triggers["workflow_dispatch"]["inputs"]
-        self.assertIn("release_tag", inputs)
-        self.assertFalse(inputs["push"]["default"])
-        self.assertEqual(data["permissions"], {"contents": "read"})
-        self.assertEqual(data["jobs"]["image"]["permissions"], {"contents": "read", "packages": "write"})
-        text = self.WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("ghcr.io/niko1221/strata", text)
-        self.assertIn("docker/publish.sh", text)
-        self.assertNotIn("${{ secrets.GITHUB_TOKEN }}\" |", text)   # the token goes through an env variable, not into the command line
-
 
 if __name__ == "__main__":
     unittest.main()

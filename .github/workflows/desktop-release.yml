@@ -1,0 +1,185 @@
+name: Desktop release (Windows, NVIDIA)
+
+# The Windows installer of this fork, with the CUDA 13 engine inside (RTX 20 series and newer: sm_75, sm_86, sm_89, sm_120 + PTX),
+# signed for the app's own updater (Tauri) and published as a GitHub release: the installer, its .sig, latest.json, SHA256SUMS.txt.
+#
+#   Release:  push a tag v<version>, where <version> is the one in app/desktop/src-tauri/Cargo.toml (e.g. v1.0.0).
+#   Try out:  Actions -> "Desktop release (Windows, NVIDIA)" -> Run workflow. Same build; the files are kept as a workflow
+#             artifact for 7 days and nothing is published.
+#
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           the content of tauri-updater.key (its public key is plugins.updater.pubkey in tauri.conf.json)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password (empty if it has none)
+#
+# Nothing here needs the feed key: the engine and Control ship inside the installer, and the app updates only through Tauri.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CUDA_VERSION: '13.0.2'
+  CUDA_DIR: 'C:\cuda'
+  ARCHS: '75;86;89;120'
+
+jobs:
+  windows-nvidia:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path app/desktop/src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne "v$v") {
+            throw "The tag ${{ github.ref_name }} does not match the app version $v (app/desktop/src-tauri/Cargo.toml). Tag v$v, or change the version first."
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Strata $v"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Only the parts of the toolkit the engine and the picture reader need, from NVIDIA's own redist directory, each checked
+      # against the SHA-256 in NVIDIA's manifest. (CUDA 13 splits crt and nvvm out of nvcc: without them nvcc cannot compile.)
+      - name: CUDA ${{ env.CUDA_VERSION }}
+        shell: pwsh
+        run: |
+          $base = 'https://developer.download.nvidia.com/compute/cuda/redist/'
+          $manifest = Invoke-RestMethod "${base}redistrib_$env:CUDA_VERSION.json"
+          $parts = 'cuda_nvcc', 'cuda_crt', 'libnvvm', 'cuda_cudart', 'cuda_cccl', 'cuda_nvrtc', 'libcublas', 'libnvjitlink',
+                   'libnvptxcompiler', 'cuda_profiler_api', 'cuda_nvml_dev'
+          New-Item -ItemType Directory -Force $env:CUDA_DIR | Out-Null
+          $tmp = Join-Path $env:RUNNER_TEMP 'cuda-redist'
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          foreach ($p in $parts) {
+            $entry = $manifest.$p.'windows-x86_64'
+            if (-not $entry) { Write-Host "skip $p (not in CUDA $env:CUDA_VERSION for Windows)"; continue }
+            $zip = Join-Path $tmp (Split-Path $entry.relative_path -Leaf)
+            Invoke-WebRequest "$base$($entry.relative_path)" -OutFile $zip
+            if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $entry.sha256) { throw "${p}: SHA-256 does not match NVIDIA's manifest" }
+            $out = Join-Path $tmp $p
+            Expand-Archive $zip -DestinationPath $out -Force
+            $root = Get-ChildItem $out -Directory | Select-Object -First 1
+            Copy-Item (Join-Path $root.FullName '*') $env:CUDA_DIR -Recurse -Force
+            Write-Host "installed $p $($manifest.$p.version)"
+          }
+          "CUDA_PATH=$env:CUDA_DIR" >> $env:GITHUB_ENV
+          "CUDA_PATH_V13_0=$env:CUDA_DIR" >> $env:GITHUB_ENV
+          "$env:CUDA_DIR\bin" >> $env:GITHUB_PATH
+          if (Test-Path "$env:CUDA_DIR\bin\x64") { "$env:CUDA_DIR\bin\x64" >> $env:GITHUB_PATH }
+          & "$env:CUDA_DIR\bin\nvcc.exe" --version
+
+      - name: Ninja
+        shell: pwsh
+        run: choco install ninja -y --no-progress
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # tools/packaging/build_cuda_windows.py: the engine, the picture reader for the same cards, BUILD.json, the CUDA DLLs it
+      # imports, the package manifest (engine-component.json) and its own --verify. The installed app copies the package folder
+      # into the components folder on first start (app/host/server/bundled-engine.mjs); nothing is downloaded.
+      - name: Engine (CUDA 13, RTX 20 series and newer)
+        shell: pwsh
+        env:
+          BUILD_JOBS: '3'
+          OUT: ${{ runner.temp }}\engine-out
+        run: |
+          python tools/packaging/build_cuda_windows.py cuda13
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pkg = Get-ChildItem $env:OUT -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'engine-component.json') } | Select-Object -First 1
+          if (-not $pkg) { throw 'The engine build made no package folder.' }
+          Copy-Item $pkg.FullName (Join-Path 'app/desktop/src-tauri/resources/engine-bundle' $pkg.Name) -Recurse
+          Write-Host "bundled engine: $($pkg.Name)"
+
+      - name: Control (pinned Python and hash-locked wheels)
+        shell: pwsh
+        run: |
+          python app/desktop/scripts/stage-control.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Node runtime
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File app/desktop/scripts/fetch-node.ps1
+
+      - name: User interface
+        shell: pwsh
+        run: |
+          npm ci --prefix app/host --no-audit --no-fund
+          npm --prefix app/host run build
+          npm ci --prefix app/desktop --no-audit --no-fund
+
+      - name: Installer (signed for the app updater)
+        shell: pwsh
+        working-directory: app/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'The repository secret TAURI_SIGNING_PRIVATE_KEY is not set (Settings -> Secrets and variables -> Actions).' }
+          $conf = Join-Path $env:RUNNER_TEMP 'updater.conf.json'
+          '{"bundle":{"createUpdaterArtifacts":true}}' | Set-Content -Encoding utf8NoBOM $conf
+          npx tauri build --bundles nsis --config $conf
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # latest.json is what installed apps read (plugins.updater.endpoints: .../releases/latest/download/latest.json).
+      # feed_tool.py checks the .sig against the public key in tauri.conf.json over the exact bytes before it writes the entry.
+      - name: Release files
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $exe = Get-ChildItem app/desktop/src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $exe -or -not (Test-Path "$($exe.FullName).sig")) { throw 'No signed installer was made.' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $name = "Strata-fork-$v-windows-x64-nvidia-setup.exe"
+          Copy-Item $exe.FullName "dist/$name"
+          Copy-Item "$($exe.FullName).sig" "dist/$name.sig"
+          python tools/packaging/feed_tool.py set-app-platform --app-json dist/latest.json --target windows-x86_64 --version $v `
+            --archive "dist/$name" --sig "dist/$name.sig" `
+            --url "https://github.com/${{ github.repository }}/releases/download/v$v/$name"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $sums = Get-ChildItem dist -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          $sums | Set-Content -Encoding utf8NoBOM dist/SHA256SUMS.txt
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Keep the files (manual runs)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: strata-fork-${{ steps.version.outputs.version }}-windows-nvidia
+          path: dist/
+          retention-days: 7
+
+      - name: Publish the release (tags)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Strata-fork ${{ steps.version.outputs.version }} (Windows, NVIDIA RTX 20 series and newer)
+          make_latest: true
+          files: dist/*
+          body: |
+            Windows installer with the CUDA 13 engine inside, for NVIDIA RTX 20 series and newer (driver 580.65 or newer).
+            Installed copies update themselves from this release (Settings -> Updates).
+            The installer is not code-signed: Windows SmartScreen asks once (More info -> Run anyway).
+            SHA256SUMS.txt lists the SHA-256 of every file.

@@ -46,14 +46,13 @@ test('item 4: the Monitor sentence is plain words; the screenshot leaves out the
   const monitor = await read('screens/Monitor.tsx');
   assert.match(monitor, /monitor-state" aria-label=\{tr\("Model state"\)\} data-snapshot-skip/);
   assert.match(monitor, /monitor-cache" data-snapshot-skip/);
-  assert.match(await read('lib/snapshot.ts'), /querySelectorAll\('\[data-snapshot-skip\]'\)/);
 });
 
-test('items 6, 7, 8: Bypass permissions everywhere, no deleted-tasks list or suggestions, a + icon, and a plain "Task removed"', async () => {
+test('items 6, 7, 8: no permission mode on tasks, no deleted-tasks list or suggestions, a + icon, and a plain "Task removed"', async () => {
   const tasks = await read('screens/Tasks.tsx'), detail = await read('components/TaskDetail.tsx'), editor = await read('components/TaskEditor.tsx'), tree = await read('app/TaskTree.tsx'), lib = await read('lib/tasks.ts');
   for (const [name, text] of [['Tasks', tasks], ['TaskDetail', detail], ['TaskEditor', editor], ['TaskTree', tree]]) assert.ok(!/Allowed to make changes/.test(text), `${name} still says it`);
-  assert.match(detail, /Bypass permissions/); assert.match(editor, /Bypass permissions/);
-  assert.match(lib, /mode:'bypass'/, 'a new task starts as Bypass permissions');
+  assert.ok(!/Bypass permissions/.test(detail) && !/Bypass permissions/.test(editor), 'a task has no permission mode');
+  assert.ok(!/mode:'bypass'/.test(lib), 'a new task has no permission mode');
   assert.ok(!/Deleted tasks|task-templates|Restore/.test(tasks), 'no deleted list, suggestions or restore on the Tasks screen');
   assert.match(tasks, /IconBtn name="plus"/);
   assert.ok(!/back=\{/.test(tasks) && /titleDetail=\{currentTask \? undefined/.test(tasks), 'nothing on the left of the navbar of an opened task (the help lines show only on the list views)');

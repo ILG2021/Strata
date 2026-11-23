@@ -33,8 +33,6 @@ const cases = [
   ['No engine for this PC was found in C:/x/components: the component folder holds no engine package. The app never downloads an engine while it starts or serves.', 'engine-missing', /engine for this computer isn’t installed yet/],
   ['cannot reach huggingface.co (<urlopen error [Errno 11001] getaddrinfo failed>)', 'network', /couldn’t reach the internet/],
   ['sha256 mismatch for Qwen3.8-Flash-Next-00001-of-00002.gguf', 'integrity', /safety check/],
-  ['The agent component (DeepSeek Harness) is not installed.', 'assistant-missing', /coding assistant isn’t installed/],
-  ['component-missing', 'assistant-missing', /coding assistant/],
   ['Strata Control did not answer within 60 s (models list).', 'control', /couldn’t read its own components/],
   ['Prepare this model’s vision files before enabling picture reading.', 'picture-reading', /Picture reading isn’t available/],
   ['server_exited (exit code 1): strata generate: GPU 0 (AMD Radeon 760M Graphics, gfx1103) is not an architecture this Strata engine was compiled for (gfx1200,gfx1201); compile it for this card', 'gpu-no-code', /no code for the graphics card/],

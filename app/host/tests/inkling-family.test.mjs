@@ -4,7 +4,6 @@
  * - src/lib/native-catalog.ts, native-fit.ts, native-names.ts
  * - server/native-resources.mjs & server/native-settings.mjs
  * - server/run-config-check.mjs & server/native-vision.mjs
- * - server/agent/profile.mjs 6-level INKLING_LOCAL_EFFORTS (default high)
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -136,15 +135,8 @@ test('inklingVisionShard, withoutInklingVision, runtimeVision, and markPictures 
   assert.equal(inkFam.sizes[0].images, true);
 });
 
-test('profile.mjs disables thinking mode for Inkling-2-Mini (off only) and run-config-check allows parallel 64', async () => {
-  const { INKLING_LOCAL_EFFORTS, buildProfile } = await import('../server/agent/profile.mjs');
-  assert.deepEqual(INKLING_LOCAL_EFFORTS, { off: 'none' });
-  const prof = buildProfile({
-    local: [{ id: 'ink', label: 'Inkling-2-Mini SQ-20', baseUrl: 'http://127.0.0.1:8080/v1', modelId: 'inkling-2-mini-sq-20', context: 32768, vision: true, slots: 8 }],
-  });
-  assert.match(prof.patch, /"reasoning": false/);
-  assert.doesNotMatch(prof.patch, /"thinkingFormat": "chat-template"/);
-  // Also verify run-config-check allows parallel up to 64 and rejects non-off reasoning_effort for Inkling-2-Mini
+test('run-config-check allows parallel 64 for Inkling-2-Mini', async () => {
+  // Verify run-config-check allows parallel up to 64 and rejects non-off reasoning_effort for Inkling-2-Mini
   const checked64 = checkRunConfig(JSON.stringify({
     exe: 'component:strata-inkling',
     arch: 'inkling2_loop',

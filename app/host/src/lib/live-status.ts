@@ -92,9 +92,6 @@ export function statusWords(frame: StatusFrame, rotation = 0): string {
       const verb = typeof a.verb === 'string' && a.verb ? tr(a.verb) : '';
       return verb ? `${verb}${target ? ` · ${target}` : ''}…` : tr(frame.text);
     }
-    case 'waiting-approval': return tr('Waiting for your answer…');
-    case 'helpers': return tr('Helpers are working ({0})…', [Number(a.n) || 1]);
-    case 'goal-step': return tr('Working on the goal…');
     default: return tr(frame.text);
   }
 }

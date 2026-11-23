@@ -47,7 +47,7 @@ test('only the app shell can hand files over; the page fetches each file once', 
   const child = spawn(process.execPath, ['server/index.mjs'], { cwd: root, env: { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_PORT: String(port), STRATA_REAL_ENGINE: '0', STRATA_WORKSPACE: join(home, 'work'), STRATA_SHUTDOWN_TOKEN: secret }, stdio: 'ignore', windowsHide: true });
   const base = `http://127.0.0.1:${port}`;
   try {
-    for (let i = 0; i < 100; i++) { try { if ((await fetch(base + '/api/skills')).ok) break; } catch { /* not up */ } await new Promise(r => setTimeout(r, 100)); }
+    for (let i = 0; i < 100; i++) { try { if ((await fetch(base + '/api/health')).ok) break; } catch { /* not up */ } await new Promise(r => setTimeout(r, 100)); }
     const picture = join(home, 'qa.png'); await writeFile(picture, Buffer.from([137, 80, 78, 71]));
     const post = (headers) => fetch(base + '/api/app/drop', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ paths: [picture] }) });
     assert.equal((await post({})).status, 403, 'a page cannot hand over paths');

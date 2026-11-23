@@ -4,7 +4,6 @@ export interface PreviewArtifact { id: string; kind: 'website' | 'markdown' | 'p
   /** When this copy was read or made (ms): a message's copy never replaces a later one (lib/preview-merge.ts). */
   at?: number; }
 export const PREVIEW_EXAMPLES: PreviewArtifact[] = [
-  { id:'sample-website', kind:'website', title:'Fieldnotes — website', url:'/examples/fieldnotes.html', demo:true },
   { id:'sample-markdown', kind:'markdown', title:'project-brief.md', url:'/examples/project-brief.md', demo:true },
   { id:'sample-image', kind:'image', title:'fieldnotes-cover.svg', url:'/examples/fieldnotes-cover.svg', demo:true },
   { id:'sample-code', kind:'code', title:'note-card.ts', url:'/examples/note-card.ts', demo:true },
@@ -14,6 +13,12 @@ export const PREVIEW_EXAMPLES: PreviewArtifact[] = [
 export function safePreviewUrl(value: string) {
   try { const u = new URL(value, location.origin); return ['http:','https:','blob:'].includes(u.protocol) ? u.href : null; }
   catch { return null; }
+}
+/** An address the preview panel may load: this app's own files (same origin) or an in-memory file (blob:). Nothing from the internet
+ *  is loaded in the panel (this fork makes no requests beyond GitHub and Hugging Face); a web address opens in the person's browser. */
+export function localPreviewUrl(value: string) {
+  const safe = safePreviewUrl(value); if (!safe) return null;
+  const u = new URL(safe); return u.protocol === 'blob:' || u.origin === location.origin ? safe : null;
 }
 export function artifactFromUrl(url: string): PreviewArtifact | null {
   const safe = safePreviewUrl(url); if (!safe) return null;

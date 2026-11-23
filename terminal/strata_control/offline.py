@@ -137,11 +137,6 @@ def child_environment(*, offline: bool, base: Mapping[str, str] | None = None) -
 def profile_requirements(cfg: Mapping[str, Any]) -> list[str]:
     """The parts of a profile that need the network, named so a refusal can explain itself."""
     needs: list[str] = []
-    servers = cfg.get("mcp_servers") or cfg.get("mcpServers")
-    if servers:
-        count = len(servers) if hasattr(servers, "__len__") else 1
-        needs.append(f"the profile declares {count} MCP server(s), which are started as subprocesses "
-                     "and may fetch tools")
     for key in ("before_load", "beforeLoad"):
         if cfg.get(key):
             needs.append(f"the profile declares a {key} command, which runs before the model loads")

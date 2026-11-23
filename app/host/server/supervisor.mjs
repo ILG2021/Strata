@@ -38,7 +38,6 @@ const state = {
 let child = null;
 let pollTimer = null;
 let hubRef = null;
-let mcpAt=0,mcpStatus=null,mcpPending=false;
 
 export function init(hub) {
   hubRef = hub;
@@ -223,15 +222,6 @@ export async function pollMetrics() {
     });
     if (!res.ok) throw new Error(String(res.status));
     state.metrics = { ...parseEngineMetrics(await res.text()), sampledAt: new Date().toISOString() };
-    if(state.metrics.dashboard) {
-      state.metrics.dashboard.mcp=mcpStatus;
-      if(!mcpPending&&Date.now()-mcpAt>10000) {
-        mcpPending=true;mcpAt=Date.now();
-        void fetch(`http://127.0.0.1:${state.port}/mcp`,{signal:AbortSignal.timeout(1500),headers:state.apiKey?{authorization:`Bearer ${state.apiKey}`}:undefined})
-          .then(async response=>{mcpStatus=response.ok?await response.json():null;})
-          .catch(()=>{mcpStatus=null;}).finally(()=>{mcpPending=false;});
-      }
-    }
   } catch {
     state.metrics = { ...state.metrics, source: 'unavailable', sampledAt: new Date().toISOString() };
   }

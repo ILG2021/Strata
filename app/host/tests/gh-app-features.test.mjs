@@ -126,23 +126,6 @@ test('the finished-work sound is opt-in, quiet for quick answers in front, and n
   assert.equal(wav.toString('latin1', 8, 12), 'WAVE');
 });
 
-test('approval notifications: shell first, the page second, nothing when off or when Strata is in front', async () => {
-  const notice = { title: 'T', body: 'B' };
-  const seen = [];
-  assert.equal(await A.showNotice(notice, { post: async () => ({ shown: true }), page: () => { seen.push('page'); return true; } }), true);
-  assert.deepEqual(seen, []);
-  assert.equal(await A.showNotice(notice, { post: async () => ({ shown: false }), page: () => { seen.push('page'); return true; } }), true);
-  assert.equal(await A.showNotice(notice, { post: async () => { throw new Error('no shell'); }, page: () => { seen.push('page2'); return false; } }), false);
-  assert.deepEqual(seen, ['page', 'page2']);
-  assert.equal(await A.approvalNeeded(false, 'write_file', false), false);
-  assert.equal(await A.approvalNeeded(true, 'write_file', true), false, 'the person is looking at Strata');
-  A.setTranslationLanguage('de');
-  assert.match(A.approvalNotice('write_file').body, /write_file/);
-  assert.notEqual(A.approvalNotice('write_file').title, 'Strata needs your answer');
-  A.setTranslationLanguage('en');
-  assert.equal(A.approvalNotice('').body, 'The assistant wants to use a tool. Open Strata to approve or deny.');
-});
-
 test('every new string exists in all eight languages with the same slots, and does not collide with another catalog', async () => {
   const languages = ['en', 'zh', 'ja', 'de', 'fr', 'es', 'ru', 'pt', 'ko', 'he'];
   const read = async name => JSON.parse(readFileSync(new URL(`../src/locales/${name}.json`, import.meta.url), 'utf8'));
@@ -184,11 +167,9 @@ test('the interface size scales the whole page, up to 200 percent, and a saved v
 test('the port, tray, sound and notification rows are in Settings, and only the desktop app shows the port and the tray', () => {
   const settings = readFileSync(new URL('../src/screens/Settings.tsx', import.meta.url), 'utf8');
   assert.match(settings, /label: 'Sound when work finishes'/);
-  assert.match(settings, /label: 'Notify me when Strata needs an answer'/);
   assert.match(settings, /\.\.\.\(shell\?\.tray \? \[\{ section: 'General', label: 'Minimise to tray'/);
   assert.match(settings, /\.\.\.\(shell\?\.desktop \? \[\{ section: 'General', label: 'App port'/);
   const store = readFileSync(new URL('../src/lib/store.ts', import.meta.url), 'utf8');
-  assert.match(store, /frame\.code === 'waiting-approval'/);
   assert.match(store, /workFinished\(state\.doneSound/);
   assert.match(store, /announcePortNotice/);
 });
@@ -204,7 +185,7 @@ test('the host route for the shell: a browser has no shell, the port choice is s
   t.after(async () => { if (child && child.exitCode === null) { child.kill(); await exited; } rmSync(home, { recursive: true, force: true, maxRetries: 3 }); });
   mkdirSync(join(home, 'data'));
   const port = await free(), base = `http://127.0.0.1:${port}`;
-  const env = { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_WORKSPACE: join(home, 'work'), STRATA_SETTINGS_FILE: join(home, 'settings.json'), STRATA_COMPONENTS_DIR: join(home, 'components'), STRATA_CONTROL_DIR: join(home, 'no-control'), STRATA_HARNESS_DIR: join(home, 'no-harness'), STRATA_NATIVE_REPO: join(home, 'no-repo'), STRATA_PORT: String(port), STRATA_SHARE_PORT: String(await free()), STRATA_TUNNEL_PORT: String(await free()), STRATA_BIND: '127.0.0.1', STRATA_REAL_ENGINE: '0', STRATA_AGENT: 'off', STRATA_NO_ACQUIRE: '1', STRATA_PORT_NOTICE: 'busy:47831:' + port, STRATA_TEST_LOCALE: 'de-DE', LOCALAPPDATA: join(home, 'Local'), APPDATA: join(home, 'Roaming'), XDG_DATA_HOME: join(home, 'xdg-data'), XDG_STATE_HOME: join(home, 'xdg-state'), XDG_CONFIG_HOME: join(home, 'xdg-config') };
+  const env = { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_WORKSPACE: join(home, 'work'), STRATA_SETTINGS_FILE: join(home, 'settings.json'), STRATA_COMPONENTS_DIR: join(home, 'components'), STRATA_CONTROL_DIR: join(home, 'no-control'), STRATA_NATIVE_REPO: join(home, 'no-repo'), STRATA_PORT: String(port), STRATA_SHARE_PORT: String(await free()), STRATA_TUNNEL_PORT: String(await free()), STRATA_BIND: '127.0.0.1', STRATA_REAL_ENGINE: '0', STRATA_AGENT: 'off', STRATA_NO_ACQUIRE: '1', STRATA_PORT_NOTICE: 'busy:47831:' + port, STRATA_TEST_LOCALE: 'de-DE', LOCALAPPDATA: join(home, 'Local'), APPDATA: join(home, 'Roaming'), XDG_DATA_HOME: join(home, 'xdg-data'), XDG_STATE_HOME: join(home, 'xdg-state'), XDG_CONFIG_HOME: join(home, 'xdg-config') };
   delete env.STRATA_SHELL_BRIDGE; delete env.STRATA_SHELL_TOKEN;
   child = spawn(process.execPath, ['server/index.mjs'], { cwd: join(import.meta.dirname, '..'), windowsHide: true, stdio: 'ignore', env });
   exited = once(child, 'exit');

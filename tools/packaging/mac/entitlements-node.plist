@@ -10,7 +10,7 @@
          with MAP_JIT. The hardened runtime refuses that mapping unless this is set. Measured on a Mac mini M4 (macOS 27.2) with
          a hardened-runtime build of Node 24.12.0: without it node dies at start ("Fatal process out of memory: Failed to reserve
          virtual memory for CodeRange"); with only this one, a 30-million-iteration JIT loop, a backtracking regexp and a
-         WebAssembly module run. The native addons of the Harness (koffi, node-pty, sharp, the system addon) load in a dry run, where
+         WebAssembly module run. Native addons load in a dry run, where
          an ad-hoc signature has no Team ID and library validation is therefore switched off for the test; with the real Developer
          ID they are checked for the same Team ID, which they share because sign-and-notarize.sh signs them all (it loads every one
          of them in the signed node before it asks Apple anything).

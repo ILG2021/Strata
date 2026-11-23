@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 /**
- * The tuning and Time-skip client routes.
+ * The tuning client routes.
  *
  * These are contract tests for the bridge between the App Host and Strata Control. They are
  * deliberately about the *shapes and the refusals*, not about measurement numbers: the numbers come
@@ -45,8 +45,6 @@ async function startHost({ python } = {}) {
     env: {
       ...process.env,
       STRATA_HOME: home,
-      // the Time-skip runs of whoever uses this PC live in their own state folder; a test must not read (or write) them
-      STRATA_TIMESKIP_DIR: join(home, 'time-skip'),
       STRATA_PORT: String(port),
       STRATA_REAL_ENGINE: '0',
       ...(python ? { STRATA_PYTHON: python } : {}),
@@ -161,51 +159,3 @@ test('an unknown tuning job is a 404, and a malformed id cannot escape the store
   }
 });
 
-test('the Time-skip run list is empty and honest when nothing has run', { timeout: 30000 }, async () => {
-  const { child, base } = await startHost();
-  try {
-    const r = await fetch(`${base}/api/timeskip`);
-    assert.equal(r.status, 200);
-    const body = await r.json();
-    assert.deepEqual(body.runs, []);
-    assert.ok(body.stateDir, 'the store location is reported so a developer can inspect it');
-  } finally {
-    child.kill('SIGKILL');
-  }
-});
-
-test('applying an unknown Time-skip run is refused, not silently accepted', { timeout: 30000 }, async () => {
-  const { child, base } = await startHost();
-  try {
-    const r = await fetch(`${base}/api/timeskip/apply`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: 'a'.repeat(32) }),
-    });
-    assert.ok(r.status >= 400, 'an unknown run must not report success');
-    const body = await r.json();
-    assert.ok(body.error !== undefined);
-  } finally {
-    child.kill('SIGKILL');
-  }
-});
-
-test('an HTTP caller cannot supply an arbitrary revision command', { timeout: 30000 }, async () => {
-  // `reviseCommand` is configured, never requested: accepting one would hand a remote caller
-  // command execution on the user's machine. The route must ignore the field.
-  const { child, base } = await startHost();
-  try {
-    const r = await fetch(`${base}/api/timeskip/start`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ workspace: '/nonexistent-workspace', prompt: 'x',
-                             reviseCommand: 'touch /tmp/strata-should-not-exist' }),
-    });
-    // The run fails because the workspace does not exist -- the point is that it fails for *that*
-    // reason, and the injected command is never run.
-    assert.ok(r.status >= 400, 'a nonexistent workspace must not start a run');
-  } finally {
-    child.kill('SIGKILL');
-    await rm('/tmp/strata-should-not-exist', { force: true });
-  }
-});

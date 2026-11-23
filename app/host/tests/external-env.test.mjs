@@ -8,7 +8,6 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { externalEnvironment, recordedOriginal, withoutAppImage } from '../server/external-env.mjs';
 import { chooseFolder, chooserUnavailable, portalFolder } from '../server/folder-dialog.mjs';
-import { agentEnvironment } from '../server/agent/harness-runtime.mjs';
 
 const APPDIR = '/tmp/.mount_StrataAbc';
 const leaky = {
@@ -46,14 +45,6 @@ test('outside an AppImage nothing changes', () => {
   assert.deepEqual(externalEnvironment(plain), plain);
   assert.deepEqual(externalEnvironment(plain, { A: '1' }), { ...plain, A: '1' });
   assert.deepEqual(withoutAppImage(plain), plain);
-});
-
-test('the coding assistant\'s shell does not inherit the AppImage\'s settings either', () => {
-  const env = agentEnvironment({ ...leaky, SOME_TOKEN: 'x' }, { DSH_HOME: '/h' });
-  assert.equal(env.LD_LIBRARY_PATH, undefined);
-  assert.ok(!/\.mount_/.test(JSON.stringify(env)), JSON.stringify(env));
-  assert.equal(env.DSH_HOME, '/h');
-  assert.equal(env.SOME_TOKEN, undefined);
 });
 
 const failure = (code, stderr = '') => Object.assign(new Error(`exit ${code}`), { code, stderr });

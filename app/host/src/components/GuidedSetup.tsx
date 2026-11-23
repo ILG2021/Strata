@@ -9,7 +9,7 @@ import { OnboardingCheckbox } from './OnboardingCheckbox';
 import { api } from '../lib/client';
 import { navigate } from '../lib/router';
 import { catalogLoading, nativeAction, useNative, type NativeJob } from '../lib/native';
-import { completeSetup, completeSetupStep, go, newSession, openSetup, selectRemoteModel, setSettingsSection, useStore } from '../lib/store';
+import { completeSetup, completeSetupStep, go, newSession, openSetup, setSettingsSection, useStore } from '../lib/store';
 import type { LocalModelFolder, SetupState } from '../lib/types';
 import { downloadCounter, engineNotReadyAfterInstall, filesHere, modelFolderLabel, onboardingError, prepareTitle, versionCardSize, type FilesHere } from '../lib/onboarding-download';
 import { guidedStatusText, installProgress, useDownloadEta } from '../lib/download-eta';
@@ -122,7 +122,6 @@ export function GuidedSetup() {
         try {
             await writes.current;
             await completeSetup();
-            selectRemoteModel(null);
             openSetup(false);
             const chat = newSession();
             go('chat', chat.id);

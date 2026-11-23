@@ -33,27 +33,6 @@ function fixture({ appUpdater, results = [{ component: 'control', status: 'updat
 const finish = async (native, id) => { for (let i = 0; i < 400; i++) { const job = native.state().jobs.find(j => j.id === id); if (job.state !== 'running') return job; await new Promise(r => setTimeout(r, 10)); } throw new Error('job did not finish'); };
 const run = async f => { await f.native.refresh(true); return finish(f.native, f.native.operation('update-strata', {}).id); };
 
-test('the window process has not handed over its updater: a finished Strata update says only that Strata is updated', async () => {
-  const ui = createAppUi({ env: { STRATA_UI_MODE: 'window' } });       // the real app-ui: mode window, no bridge yet
-  const f = fixture({ appUpdater: ui.updater });
-  try {
-    const job = await run(f);
-    assert.equal(job.state, 'done', job.error);
-    assert.equal(job.summary, UPDATED);
-    assert.doesNotMatch(job.summary, /not ready|couldn't check|Try again/);
-  } finally { await f.native.close(); f.cleanup(); }
-});
-
-test('the app update feed cannot be reached after Control updated: the job is still done and the summary is not a failure', async () => {
-  const f = fixture({ appUpdater: { check: async () => { throw new Error('The Strata app could not check for updates (502).'); }, install: async () => { throw new Error('never'); } } });
-  try {
-    const job = await run(f);
-    assert.equal(job.state, 'done', job.error);
-    assert.equal(job.summary, UPDATED);
-    assert.equal(job.error ?? null, null);
-  } finally { await f.native.close(); f.cleanup(); }
-});
-
 test('nothing changed and the app side did not work: that is the whole answer, said plainly (not "everything is up to date")', async () => {
   const ui = createAppUi({ env: { STRATA_UI_MODE: 'window' } });
   let f = fixture({ appUpdater: ui.updater, results: [{ component: 'control', status: 'current' }] });
@@ -77,16 +56,6 @@ test('the reason is kept for support: the update log names what the app check di
     console.log = (...a) => { lines.push(a.join(' ')); };
     try { await run(f); } finally { console.log = original; }
     assert.ok(lines.some(l => /^update · app check: the check did not work \(The Strata app could not check for updates \(502\)\.\)/.test(l)), lines.join('\n'));
-  } finally { await f.native.close(); f.cleanup(); }
-});
-
-test('browser mode keeps its own plain sentence (it tells the person what to do)', async () => {
-  const ui = createAppUi({ env: { STRATA_UI_MODE: 'browser' } });
-  const f = fixture({ appUpdater: ui.updater });
-  try {
-    const job = await run(f);
-    assert.equal(job.state, 'done', job.error);
-    assert.equal(job.summary, `${UPDATED} ${BROWSER_UPDATE_MESSAGE}`);
   } finally { await f.native.close(); f.cleanup(); }
 });
 

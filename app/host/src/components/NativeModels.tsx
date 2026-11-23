@@ -19,7 +19,7 @@ import { sizeGb } from '../lib/format';
 import { NativeDeleteDialog } from './NativeDelete';
 import { plainFailureText } from '../lib/plain-errors';
 import { api } from '../lib/client';
-import { go, setSettingsSection, selectRemoteModel, pushToast } from '../lib/store';
+import { go, setSettingsSection, pushToast } from '../lib/store';
 import { installedListPending, nativeAction, useNative, type NativeJob } from '../lib/native';
 import { tuneEffective } from '../lib/native-tune';
 import { tunedFields } from '../lib/tune-values';
@@ -204,7 +204,6 @@ export function NativeModels({ onOtherModels, onReady, onImport, onConnectEngine
     const pickVision = (next: string) => { if (selectedSize) visionPicks.current.set(selectedSize.id, next); setVision(next); };
     useEffect(() => { if (jobId && job?.state === 'done' && job.id !== toastedJob && (job.kind === 'load' || job.kind === 'install')) {
         setToastedJob(job.id);
-        selectRemoteModel(null);
         pushToast('success', 'Model ready', 'Start a new chat when you’re ready.');
     } }, [job?.state]);
     // The picture files came without a load: a model that is loaded right now still runs without pictures until it is loaded again.

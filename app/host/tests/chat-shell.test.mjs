@@ -46,14 +46,6 @@ test('native file actions use explicit argument arrays and reject traversal and 
  } finally {await rm(root,{recursive:true,force:true});}
 });
 
-test('API replies use their own context limit and never inherit local engine readings',()=>{
- const remote={...session,messages:[...session.messages,{role:'assistant',remoteModel:true,inputTokens:50,tokens:10,contextMax:64000,tps:12}]};
- const monitor={phase:'generating',outputTps:900,context:{sessionId:'chat-a',usedTokens:9000,maxTokens:10000}};
- const metrics=chatMetrics(remote,monitor,32768);
- assert.equal(metrics.max,64000);assert.equal(metrics.used,60);assert.equal(metrics.speed,12);
- assert.equal(chatMetrics({...remote,messages:[{role:'assistant',remoteModel:true,inputTokens:50,tokens:10}]},monitor,32768).max,null);
-});
-
 test('a web address from a reply opens in the default browser with an argument array, and only http(s) (#4721)',async()=>{
  const calls=[];const launch=async(...args)=>calls.push(args);
  await openArtifact({action:'open',url:'https://github.com/Niko1221/Strata/issues/3818?a=1&b=2'},{platform:'win32',launch});

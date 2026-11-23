@@ -11,8 +11,8 @@ const colors = ['#4d82d8', '#6998e6', '#8aaeea', '#a6c1ee', '#c4d7f4', '#dce7f8'
 export function UsageDashboard({ loaded }: {
     loaded: boolean;
 }) {
-    const native = useNative(), remoteModel = useStore(s => s.remoteModel);
-    const canChat = loaded || !!remoteModel || !!native?.instances.some(i => i.id === native.defaultId && i.status === 'ready');
+    const native = useNative();
+    const canChat = loaded || !!native?.instances.some(i => i.id === native.defaultId && i.status === 'ready');
     const sessions = useStore(s => s.sessions), library = useStore(s => s.library);
     const [tab, setTab] = useState<'overview' | 'models'>('overview'), [period, setPeriod] = useState<UsagePeriod>('all'), [expanded, setExpanded] = useState(false);
     const now = new Date();
@@ -47,7 +47,7 @@ export function UsageDashboard({ loaded }: {
     const maxTokens = Math.max(1, ...bins.map(b => b.total));
     const dateLabel = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(localeTag(), { month: 'short', day: 'numeric' });
     const peak = usage.peakHour === null ? '—' : new Date(2026, 0, 1, usage.peakHour).toLocaleTimeString(localeTag(), { hour: 'numeric', minute: '2-digit' });
-    const firstChat = !sessions.some(s => !s.showcase && s.messages.some(m => m.role === 'user' && !m.example && !m.timeSkipId));
+    const firstChat = !sessions.some(s => !s.showcase && s.messages.some(m => m.role === 'user' && !m.example));
     if (firstChat && canChat)
         return <section className="first-chat-start" aria-label={tr("Start your first chat")}><span className="first-chat-mark"><Brand variant="mark" height={38} decorative/><span className="first-chat-status"><Icon name="check" size={11}/></span></span><h2>{tr("Hello, I\u2019m Strata.")}</h2><p>{tr("Say hello, or jump straight in.")}</p></section>;
     return <section className="usage-home" aria-label={tr("Usage dashboard")}>

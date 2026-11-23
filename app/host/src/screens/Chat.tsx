@@ -2,9 +2,7 @@ import {localeTag} from '../lib/i18n';
 import { tr } from '../lib/i18n';
 import { UsageDashboard } from '../components/UsageDashboard';
 import { FloatingMenu } from '../components/FloatingMenu';
-import { lazyScreen } from '../lib/lazy-screen';
 import { measureFrame } from '../lib/overlay-place';
-import { timeSkipPrompt, timeSkipTabId, type TimeSkipRun } from '../lib/time-skip';
 import { ChatToolbar } from '../components/ChatToolbar';
 import { ChatTelemetry } from '../components/TelemetryPopover';
 import { ArtifactCard } from '../components/ArtifactCard';
@@ -21,41 +19,38 @@ import { ComposerControls } from '../components/ComposerControls';
 import { ChatPhotos } from '../components/ChatPhotos';
 import { useChatPhotos, removeChatPhoto } from '../lib/chat-photos';
 import { useNative } from '../lib/native';
-import { COMPACT_FILES_FROM, mainResult, previewOf } from '../lib/deliverables';
 import { noModelNotice } from '../lib/no-model';
 import { ReasoningBlock } from '../components/ReasoningBlock';
 import { StatusLine } from '../components/StatusLine';
-import { GoalBar } from '../components/GoalBar';
-import { PlanCard, PlanPanel, QueuedMessages } from '../components/PlanCard';
 import { FolderChip } from '../components/FolderChip';
 import { DropZone, DROP_EVENT, pastedFiles } from '../components/DropZone';
-import { ActivityLine, DraftLines, EditedFiles, FileCard, FilesSummary, SkillsUsed } from '../components/Deliverables';
-import { queueMessage, usePlan, usePlanQuiet } from '../lib/plan';
-import { plainFailureText } from '../lib/plain-errors';
 import { contextRecovery } from '../lib/context-recovery';
 import { useLiveStatus } from '../lib/live-status';
-import { ApprovalDock, SCOPE } from '../components/ApprovalCard';
-import { artifactFromUrl, type PreviewArtifact } from '../lib/artifacts';
+import { artifactFromUrl, localPreviewUrl, type PreviewArtifact } from '../lib/artifacts';
 import { openExternal } from '../lib/open-external';
 import { busyPlan, parkedReady } from '../lib/while-busy';
 import { composeNumbered, composeQuoted, parseQuoted, rememberQuoteSources, type Quote, type QuoteSource } from '../lib/quotes';
 /** Chat — talk to the one loaded model. */
-import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from '../components/Markdown';
 import { Btn, Icon, IconBtn, ErrorNotice, type IconName } from '../components/ui';
 import { composerCap, scrollBehavior } from '../lib/responsive';
 import { relTime, cx, duration, tokens, tps } from '../lib/format';
-import { chosenRemote, hasModelToChat, showNoModelHint } from '../lib/composer-model';
-import { addQuote, clearQuotes, removeQuote, createSubagentExample, parkMessage, takeParked, pushToast, setPreviewTabClosed, setPreviewPanelClosed, branchFrom, continueLast, markRead, retryLast, selectSession, rewindTo, sendMessage, stopStreaming, useStore, } from '../lib/store';
+import { hasModelToChat, showNoModelHint } from '../lib/composer-model';
+import { addQuote, clearQuotes, removeQuote, parkMessage, takeParked, pushToast, setPreviewTabClosed, setPreviewPanelClosed, branchFrom, continueLast, markRead, retryLast, selectSession, rewindTo, sendMessage, stopStreaming, useStore, } from '../lib/store';
 import { CopyBtn, CopyMenuItem, MenuCloseContext } from '../components/CopyBtn';
 import { KEYS_UP, PILL_DISTANCE, distanceFromBottom, followAfterScroll, wheelLeavesBottom } from '../lib/follow-scroll';
 import { getSlashCommands } from '../lib/commands';
 import { useLocation } from '../lib/router';
 import { composerSends } from '../lib/shortcut-bindings';
 import type { ChatMessage, Session, ToolCall } from '../lib/types';
-// The Time-skip panel and its progress card are only drawn in a chat that has a Time-skip run: their code loads then (and a few seconds after start, see main.tsx).
-const TimeSkipPanel = lazyScreen(() => import('../components/TimeSkipPanel'), (m) => m.TimeSkipPanel);
-const TimeSkipWorking = lazyScreen(() => import('../components/TimeSkipWorking'), (m) => m.TimeSkipWorking);
+/** What each kind of tool call may do, in the words the tool card shows. */
+const SCOPE: Record<ToolCall['scope'], { label: string }> = {
+    read: { label: 'Reads' },
+    write: { label: 'Writes' },
+    shell: { label: 'Runs a command' },
+    connected: { label: 'Connected tool' },
+};
 export function ChatScreen() {
     const location = useLocation();
     const sessions = useStore((s) => s.sessions);
@@ -160,25 +155,12 @@ export function ChatScreen() {
     }, [expanded]);
     const [previews, setPreviews] = useState<PreviewArtifact[]>([]);
     const [selectedPreview, setSelectedPreview] = useState<string | null>(null);
-    const timeSkipRuns = (session?.timeSkips ?? []).filter(run => session?.messages.some(m => m.timeSkipId === run.id && m.role === 'assistant') && (!run.job || (run.job.files?.length ?? 0) > 0));
-    const runTabs = timeSkipRuns.map((run, i) => ({ id: timeSkipTabId(run.id), title: timeSkipRuns.length > 1 ? `Time-skip ${i + 1}` : 'Time-skip', icon: 'branch' as const, controls: 'time-skip-content' })).filter(tab => !session?.closedPreviews?.includes(tab.id));
-    const plan = usePlan(session?.id);
-    const planTabId = session ? `plan:${session.id}` : '';
-    const planTab = plan && plan.state !== 'rejected' && !session?.closedPreviews?.includes(planTabId) ? [{ id: planTabId, title: 'Plan', icon: 'check' as const, controls: 'plan-content' }] : [];
-    const planShown = planTab.length > 0 && selectedPreview === planTabId;
-    const planRunId = plan?.state === 'running' ? plan.id : '';
-    useEffect(() => { if (planRunId && planTabId && !session?.closedPreviews?.includes(planTabId)) setSelectedPreview(planTabId); }, [planRunId]);
-    // The chat shows every run of this chat (a running one has no files yet, so no tab); the sidebar tabs only those with something to compare.
-    const allTimeSkipRuns = session?.timeSkips ?? [];
-    const extraTabs = [...runTabs, ...planTab];
-    const selectedRun = timeSkipRuns.find(run => timeSkipTabId(run.id) === selectedPreview);
-    const inlinePreview = splitWidth >= (selectedRun || planShown ? 760 : 1120);
+    const inlinePreview = splitWidth >= 1120;
     const paneWidth = previewWidth(splitWidth, previewFraction);
     const splitStyle = inlinePreview && selectedPreview && !expanded ? { gridTemplateColumns: `minmax(0,1fr) ${paneWidth}px` } : undefined;
-    const resizeHandle = !setupVisible && inlinePreview && selectedPreview && !expanded ? <PreviewResizeHandle container={splitRef} total={splitWidth} fraction={previewFraction} onChange={setPreviewFraction} controls={selectedRun ? 'time-skip-content' : planShown ? 'plan-content' : 'artifact-content'}/> : null;
-    const runCount = timeSkipRuns.length;
+    const resizeHandle = !setupVisible && inlinePreview && selectedPreview && !expanded ? <PreviewResizeHandle container={splitRef} total={splitWidth} fraction={previewFraction} onChange={setPreviewFraction} controls="artifact-content"/> : null;
     const previewCount = session?.messages.reduce((n, m) => n + (m.artifacts?.length ?? 0), 0) ?? 0;
-    useEffect(() => { const items = [...new Map((session?.messages.flatMap(m => m.artifacts ?? []) ?? []).map(a => [a.id, a])).values()]; setPreviews(items.filter(a => !session?.closedPreviews?.includes(a.id))); setSelectedPreview(session && previewsDeferred(session.id) || session?.closedPreviews?.includes(session.previewOpen ?? '') ? null : session?.previewOpen?.startsWith('time-skip:') && !timeSkipRuns.some(r => timeSkipTabId(r.id) === session.previewOpen) ? null : session?.previewOpen ?? null); }, [session?.id]);
+    useEffect(() => { const items = [...new Map((session?.messages.flatMap(m => m.artifacts ?? []) ?? []).map(a => [a.id, a])).values()]; setPreviews(items.filter(a => !session?.closedPreviews?.includes(a.id))); setSelectedPreview(session && previewsDeferred(session.id) || session?.closedPreviews?.includes(session.previewOpen ?? '') || session?.previewOpen?.startsWith('time-skip:') || session?.previewOpen?.startsWith('plan:') ? null : session?.previewOpen ?? null); }, [session?.id]);
     useEffect(() => {
         // A message's copy of a file never replaces one that was read later (lib/preview-merge.ts); nothing changed = the same array = no update.
         const items = messageArtifacts(session?.messages);
@@ -186,11 +168,6 @@ export function ChatScreen() {
             setPreviews(old => syncArtifacts(old, items, session?.closedPreviews));
     }, [previewCount]);
     const localUrls = useRef<string[]>([]);
-    useEffect(() => {
-        const id = session?.previewOpen;
-        if (id?.startsWith('time-skip:') && timeSkipRuns.some(r => timeSkipTabId(r.id) === id) && !session?.closedPreviews?.includes(id) && !(session && previewsDeferred(session.id)))
-            setSelectedPreview(id);
-    }, [session?.id, runCount]);
     useEffect(() => () => localUrls.current.forEach(url => URL.revokeObjectURL(url)), []);
     function openPreview(item: PreviewArtifact) {
         endPreviewDeferral();
@@ -201,8 +178,8 @@ export function ChatScreen() {
         setPreviews(old => openItem(old, item));
         setSelectedPreview(item.id);
     }
-    /* A run that finishes with a file the sidebar can show opens its main result there by itself (one file, never several). Only a run seen
-       finishing here does it: opening an old chat shows nothing new. A file that cannot be read just stays a card with Open. */
+    /* A reply that finishes with a whole HTML page opens it in the sidebar by itself. Only a reply seen finishing here does it: opening an old
+       chat shows nothing new. */
     const replyWasStreaming = useRef<Map<string, boolean>>(new Map());
     const lastReply = [...(session?.messages ?? [])].reverse().find(m => m.role === 'assistant');
     useEffect(() => {
@@ -210,15 +187,13 @@ export function ChatScreen() {
         const before = replyWasStreaming.current.get(lastReply.id);
         replyWasStreaming.current.set(lastReply.id, !!lastReply.streaming);
         if (before !== true || lastReply.streaming || lastReply.error) return;
-        const main = mainResult(lastReply.deliverables, lastReply.content);
-        // No file to open: one whole HTML page in the answer goes to the sidebar too (a snippet keeps its preview button).
-        if (!main) { const page = lastReply.blocks?.some(b => b.kind === 'group') ? null : mainCodePreview(lastReply.id, lastReply.content); if (page) openPreview(page); return; }
-        const sessionId = session.id;
-        void previewOf(sessionId, main).then(item => { if (session.id === sessionId) openPreview(item); }, () => { });
+        // One whole HTML page in the answer goes to the sidebar (a snippet keeps its preview button).
+        const page = mainCodePreview(lastReply.id, lastReply.content);
+        if (page) openPreview(page);
     }, [lastReply?.id, lastReply?.streaming]);
     useEffect(() => { setSelectedPreviewId(setupVisible ? null : selectedPreview); return () => setSelectedPreviewId(null); }, [selectedPreview, setupVisible]);
     function closeTab(id: string) {
-        const next = closePreviewTab([...previews.map(p => ({ id: p.id })), ...extraTabs], selectedPreview, id);
+        const next = closePreviewTab(previews.map(p => ({ id: p.id })), selectedPreview, id);
         setPreviews(previews.filter(p => p.id !== id));
         setSelectedPreview(next.selected);
         setPreviewTabClosed(session?.id, id, true, next.selected);
@@ -234,13 +209,13 @@ export function ChatScreen() {
         setSelectedPreview(id);
         setPreviewTabClosed(session?.id, id, false, id);
     }
-    function openTimeSkip(id: string) { selectPreview(timeSkipTabId(id)); }
     function openLink(url: string) {
         const item = artifactFromUrl(url);
         if (!item)
             return;
-        // A web address opens in the person's own browser; only a file (a PDF, picture, table, code or Markdown) is shown in the side panel (#4721).
-        if (item.kind === 'website') {
+        // A web address opens in the person's own browser; only a file of this computer (a PDF, picture, table, code or Markdown) is shown in
+        // the side panel (#4721). A file on the internet (https://…/a.pdf) opens in the browser too: the panel loads nothing from the internet.
+        if (item.kind === 'website' || !localPreviewUrl(url)) {
             void openExternal(url);
             return;
         }
@@ -248,13 +223,12 @@ export function ChatScreen() {
     }
     /* The message list is memoised (#4640 family: Out of Memory in a long chat): a streamed token changes one message, so the others must not
        re-render. These handlers keep one identity for the life of the screen and always call the newest functions above. */
-    const latestHandlers = useRef({ editPrompt, openPreview, closeTab, openTimeSkip, openLink });
-    latestHandlers.current = { editPrompt, openPreview, closeTab, openTimeSkip, openLink };
+    const latestHandlers = useRef({ editPrompt, openPreview, closeTab, openLink });
+    latestHandlers.current = { editPrompt, openPreview, closeTab, openLink };
     const messageHandlers = useMemo(() => ({
         onEditPrompt: (text: string) => latestHandlers.current.editPrompt(text),
         onPreview: (a: PreviewArtifact) => latestHandlers.current.openPreview(a),
         onClosePreview: (id: string) => latestHandlers.current.closeTab(id),
-        onOpenTimeSkip: (id: string) => latestHandlers.current.openTimeSkip(id),
         onOpenLink: (url: string) => latestHandlers.current.openLink(url),
     }), []);
     const scroller = useRef<HTMLDivElement>(null);
@@ -333,9 +307,7 @@ export function ChatScreen() {
         return () => ro.disconnect();
     }, [session?.id, session?.messages.length === 0]);
     const textarea = useRef<HTMLTextAreaElement>(null);
-    const remote = useStore(s => s.remoteModel), providers = useStore(s => s.providers);
-    const apiModel = chosenRemote(providers, remote)?.model;
-    const loaded = apiModel ?? library?.variants.find((v) => v.id === library.loaded) ?? null;
+    const loaded = library?.variants.find((v) => v.id === library.loaded) ?? null;
     /**
      * Follow the stream only when the reader is already at the bottom. Scrolling
      * back through a long conversation should not be yanked forward by the next
@@ -454,7 +426,7 @@ export function ChatScreen() {
         if (!text && !queuedPhotos.length)
             return;
         if (streaming) {
-            // Typed while a goal runs: it waits in the queue, shown under the conversation. With no goal running there is nothing to queue behind.
+            // Typed while an answer is written: Send after keeps it here until the answer is done; Wait leaves it in the box.
             if (!text || !session)
                 return;
             const plan = busyPlan(whileBusy);
@@ -467,20 +439,18 @@ export function ChatScreen() {
                 stopStreaming();
                 return;
             }
-            updateDraft('');
-            void queueMessage(session.id, out).then(ok => { if (ok) { clearQuotes(session.id); return; } if (!ok) { if (plan === 'goal') { clearQuotes(session.id); parkMessage(session.id, out); return; } updateDraft(text); pushToast('info', tr('The assistant is still answering'), tr('Send your message when it has finished.')); } }, e => { updateDraft(text); pushToast('error', tr('The message was not queued'), plainFailureText(e instanceof Error ? e.message : String(e)).message); });
+            if (plan === 'park') {
+                updateDraft('');
+                clearQuotes(session.id);
+                parkMessage(session.id, out);
+                return;
+            }
+            pushToast('info', tr('The assistant is still answering'), tr('Send your message when it has finished.'));
             return;
         }
-        const timeSkip = timeSkipPrompt(text);
-        if (timeSkip === '') {
-            pushToast('info', 'Add a prompt after /time-skip');
-            return;
-        }
-        if (timeSkip === null) {
-            // No model to answer: say so plainly (or show the download), and do not start a run.
-            const why = noModelNotice(chatNative ?? null, { libraryLoaded: !!loaded });
-            if (why) { pushToast('info', tr(why.title), tr(why.message)); return; }
-        }
+        // No model to answer: say so plainly (or show the download), and do not start a run.
+        const why = noModelNotice(chatNative ?? null, { libraryLoaded: !!loaded });
+        if (why) { pushToast('info', tr(why.title), tr(why.message)); return; }
         updateDraft('');
         if (session) clearQuotes(session.id);
         void sendMessage(session ? quotedMessage(quotes, text, numberQuotes) : text);
@@ -488,8 +458,8 @@ export function ChatScreen() {
     function onComposerKey(_e: React.KeyboardEvent) { }
     if (!session) {
         return (<>
-        <ChatToolbar previewWidth={paneWidth} extraTabs={extraTabs} session={session} items={previews} onCloseTab={closeTab} selected={setupVisible ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); setExpanded(false); closePreviewPanel(); }} inline={inlinePreview} expanded={expanded} onExpand={() => setExpanded(v => !v)}/>
-        <div className="chatsplit" style={splitStyle} data-timeskip={!!selectedRun || undefined} ref={splitRef} data-preview={!!selectedPreview && inlinePreview || undefined} data-expanded={expanded && !!selectedPreview && inlinePreview || undefined}>
+        <ChatToolbar previewWidth={paneWidth} session={session} items={previews} onCloseTab={closeTab} selected={setupVisible ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); setExpanded(false); closePreviewPanel(); }} inline={inlinePreview} expanded={expanded} onExpand={() => setExpanded(v => !v)}/>
+        <div className="chatsplit" style={splitStyle} ref={splitRef} data-preview={!!selectedPreview && inlinePreview || undefined} data-expanded={expanded && !!selectedPreview && inlinePreview || undefined}>
          <DropZone className="chatcol">
           <div className="main__body chat" ref={scroller}>
             {tr(awayFromBottom ? (<button type="button" className="jumplatest" data-finished={justFinished || undefined} aria-label={tr("Scroll to the latest message")} title={tr("Scroll to the latest message")} onClick={() => scrollToLatest()}>
@@ -507,12 +477,12 @@ export function ChatScreen() {
     }
     return (<>
       {tr(selection && session ? <button type="button" className="quote-selection" style={{ left: selection.x, top: selection.y }} onMouseDown={e => e.preventDefault()} onClick={() => { addQuote(session.id, selection.text, selection.messageId, selection.role); window.getSelection()?.removeAllRanges(); setSelection(null); }}>{tr("Quote")}</button> : null)}
-      <ChatToolbar previewWidth={paneWidth} extraTabs={extraTabs} session={session} items={previews} onCloseTab={closeTab} selected={setupVisible ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); setExpanded(false); closePreviewPanel(); }} inline={inlinePreview} expanded={expanded} onExpand={() => setExpanded(v => !v)}/>
+      <ChatToolbar previewWidth={paneWidth} session={session} items={previews} onCloseTab={closeTab} selected={setupVisible ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); setExpanded(false); closePreviewPanel(); }} inline={inlinePreview} expanded={expanded} onExpand={() => setExpanded(v => !v)}/>
 
       {/* The composer belongs to the conversation column, not the window: with
                 the context panel open, a full-width composer sat underneath the panel
                 and drifted out of alignment with the transcript it belongs to. */}
-      <div className="chatsplit" style={splitStyle} data-timeskip={!!selectedRun || undefined} ref={splitRef} data-preview={!!selectedPreview && inlinePreview || undefined} data-expanded={expanded && !!selectedPreview && inlinePreview || undefined}>
+      <div className="chatsplit" style={splitStyle} ref={splitRef} data-preview={!!selectedPreview && inlinePreview || undefined} data-expanded={expanded && !!selectedPreview && inlinePreview || undefined}>
         <DropZone className="chatcol">
           <div className="main__body chat" ref={scroller} onScroll={(e) => {
             const el = e.currentTarget;
@@ -537,17 +507,14 @@ export function ChatScreen() {
 
             <div className="chat__inner">
               {tr(session.messages.length === 0 ? (session.statsAvailable === false ? <p className="small muted">{tr("Editing from an earlier message. Update the prompt below.")}</p> :
-            <UsageDashboard loaded={!!loaded}/>) : (session.messages.map((m, i) => (<Message key={m.id} message={m} isLast={i === session.messages.length - 1} onEditPrompt={messageHandlers.onEditPrompt} onPreview={messageHandlers.onPreview} onClosePreview={messageHandlers.onClosePreview} onOpenTimeSkip={messageHandlers.onOpenTimeSkip} timeSkipDone={!!allTimeSkipRuns.find(r => r.id === m.timeSkipId)?.completedAt} timeSkipReal={!!allTimeSkipRuns.find(r => r.id === m.timeSkipId)?.job} timeSkipRun={allTimeSkipRuns.find(r => r.id === m.timeSkipId)} onOpenLink={messageHandlers.onOpenLink}/>))))}
-              <QueuedMessages chatId={session.id}/>
+            <UsageDashboard loaded={!!loaded}/>) : (session.messages.map((m, i) => (<Message key={m.id} message={m} isLast={i === session.messages.length - 1} onEditPrompt={messageHandlers.onEditPrompt} onPreview={messageHandlers.onPreview} onClosePreview={messageHandlers.onClosePreview} onOpenLink={messageHandlers.onOpenLink}/>))))}
             </div>
           </div>
           <div className="jumplatest-row">{tr(awayFromBottom ? (<button type="button" className="jumplatest" data-finished={justFinished || undefined} aria-label={tr("Scroll to the latest message")} title={tr("Scroll to the latest message")} onClick={() => scrollToLatest()}>
                 <Icon name="chevron" size={18}/></button>) : null)}</div>
           <Composer draft={draft} setDraft={updateDraft} loaded={!!loaded} streaming={streaming} onSubmit={submit} onKey={onComposerKey} session={session} onPreview={openPreview} textareaRef={textarea}/>
         </DropZone>
-        {tr(!setupVisible && selectedRun && session ? <Suspense fallback={null}><TimeSkipPanel key={selectedRun.id} run={selectedRun} sessionId={session.id} inline={inlinePreview} expanded={expanded} onCompare={setExpanded} onPreview={openPreview} onClose={() => { setSelectedPreview(null); setExpanded(false); closePreviewPanel(); }}/></Suspense> : null)}
-        {tr(!setupVisible && planShown ? <PlanPanel chatId={session?.id}/> : null)}
-        <ArtifactPanel items={previews} onCloseTab={closeTab} selected={setupVisible || planShown ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); closePreviewPanel(); }} inline={inlinePreview}/>
+        <ArtifactPanel items={previews} onCloseTab={closeTab} selected={setupVisible ? null : selectedPreview} onSelect={selectPreview} onClose={() => { setSelectedPreview(null); closePreviewPanel(); }} inline={inlinePreview}/>
         {tr(resizeHandle)}
       </div>
     </>);
@@ -560,17 +527,9 @@ interface SlashCommand {
     run: () => void;
 }
 function useSlashCommands(clear: () => void, setDraft: (value: string) => void): SlashCommand[] {
-    const demo = useStore(s => s.library?.mode === 'simulated');
     return [
-        { id: 'time-skip', label: '/time-skip', hint: 'Try a change on a copy, check it, and keep it only if it is better', icon: 'branch', run: () => setDraft('/time-skip ') },
-        { id: 'goal', label: '/goal', hint: 'Set a goal and let the assistant keep working until it is done', icon: 'bolt', run: () => setDraft('/goal ') },
-        { id: 'plan', label: '/plan', hint: 'Have the assistant write a plan first; nothing runs until you approve it', icon: 'check', run: () => setDraft('/plan ') },
-        { id: 'research', label: '/research', hint: 'Search the web, read the pages and answer with sources', icon: 'search', run: () => setDraft('/research ') },
-        { id: 'compact', label: '/compact', hint: 'Summarize the older messages so the chat is faster and has room again', icon: 'layers', run: () => { clear(); void sendMessage('/compact'); } },
         { id: 'loop', label: '/loop', hint: 'Repeat a message every few minutes while this chat is open', icon: 'refresh', run: () => setDraft('/loop 10m ') },
-        { id: 'website', label: '/website', hint: 'Open a website in the preview sidebar', icon: 'link', run: () => { clear(); window.dispatchEvent(new Event('strata:open-website')); } },
         { id: 'preview', label: '/preview', hint: 'Open a local file in the preview sidebar', icon: 'file', run: () => { clear(); window.dispatchEvent(new Event('strata:open-preview')); } },
-        ...(demo ? [{ id: 'subagents', label: '/subagents', hint: 'Preview subagent statistics', icon: 'experts' as const, run: () => { clear(); createSubagentExample(); } }] : []),
         ...getSlashCommands().map(command => ({ ...command, run: () => { clear(); command.run(); } }))
     ];
 }
@@ -603,7 +562,7 @@ function readerHasSelection(scroller: HTMLElement): boolean {
     return !!sel && !sel.isCollapsed && !!sel.anchorNode && scroller.contains(sel.anchorNode) && sel.toString().trim().length > 0;
 }
 const NO_QUOTES: Quote[] = [];
-/** The message that goes out: the quoted passages in their fixed form, then the person's words. A command such as /plan goes out as typed. */
+/** The message that goes out: the quoted passages in their fixed form, then the person's words. A command such as /loop goes out as typed. */
 function quotedMessage(quotes: readonly Quote[], text: string, numbered = false): string {
     if (!quotes.length || text.startsWith('/')) return text;
     if (!numbered) return composeQuoted(quotes.map(q => q.text), text);
@@ -625,8 +584,7 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
 }) {
     const clearDraft = useCallback(() => setDraft(''), [setDraft]);
     const photos = useChatPhotos(session?.id), native = useNative();
-    const remotePick = useStore(s => s.remoteModel), remoteProviders = useStore(s => s.providers);
-    const canChat = hasModelToChat({ remote: chosenRemote(remoteProviders, remotePick), localLoaded: loaded, nativeReady: !!native?.instances.some(i => i.status === 'ready') });
+    const canChat = hasModelToChat({ localLoaded: loaded, nativeReady: !!native?.instances.some(i => i.status === 'ready') });
     const whileBusy = useStore(s => s.whileBusy), parkedList = useStore(s => (session ? s.parked[session.id] : undefined)) ?? NO_PARKED;
     const quoteList = useStore(s => (session ? s.quotes[session.id] : undefined)) ?? NO_QUOTES;
     // A command that runs at once (/compact, /website) clears only the "/..." the person typed to find it, never a message they were writing
@@ -659,15 +617,13 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
     return (<div className="composerwrap">
       <div className="composer">
         <div className="composer__inner">
-          <ApprovalDock sessionId={session?.id}/>
           {tr(fileError ? <ErrorNotice message={fileError} action={tr("Dismiss")} onRetry={() => setFileError('')}/> : null)}
           <FolderChip chatId={session?.id} disabled={streaming}/>
-          <GoalBar chatId={session?.id}/>
           {tr(quoteList.length ? <div className="quotes">{tr(quoteList.map(q => <div className="quote" key={q.id}><button type="button" className="quote__body" title={tr("Go to the quoted message")} onClick={() => document.querySelector(`[data-message-id="${CSS.escape(q.messageId)}"]`)?.scrollIntoView({ block: 'center', behavior: scrollBehavior() })}><span className="xs muted">{tr(q.role === 'user' ? "Quoting you" : "Quoting the assistant")}</span><span className="quote__text">{q.text}</span></button><IconBtn name="x" size={14} title={tr("Remove this quote")} onClick={() => removeQuote(session!.id, q.id)}/></div>))}</div> : null)}
           {tr(parkedList.length ? <div className="parked" role="status">{tr(parkedList.map((text, i) => <div className="parked__item" key={`${i}-${text}`}><span className="xs muted">{tr("Waiting to send")}</span><span className="parked__text" title={text}>{text}</span><IconBtn name="x" size={14} title={tr("Take back")} onClick={() => { const back = takeParked(session!.id, i); if (back !== undefined && !draft.trim()) setDraft(back); }}/></div>))}</div> : null)}
           <div className="st-composer" style={{ boxShadow: 'var(--st-sh-bar)' }}>
           {tr(photos.length ? <ChatPhotos photos={photos} onRemove={id => removeChatPhoto(id, session?.id)}/> : null)}
-          <textarea ref={textareaRef} rows={1} value={draft} aria-label={tr("Message Strata")} placeholder={tr(canChat ? 'Message Strata…' : 'Try /time-skip, or load a model to chat…')} onFocus={() => setSlashDismissed(false)} onBlur={() => ime.current.reset()} onCompositionStart={() => ime.current.compositionStart()} onCompositionEnd={(e) => ime.current.compositionEnd(e.timeStamp)} onPaste={(e) => {
+          <textarea ref={textareaRef} rows={1} value={draft} aria-label={tr("Message Strata")} placeholder={tr('Message Strata…')} onFocus={() => setSlashDismissed(false)} onBlur={() => ime.current.reset()} onCompositionStart={() => ime.current.compositionStart()} onCompositionEnd={(e) => ime.current.compositionEnd(e.timeStamp)} onPaste={(e) => {
             // A picture on the clipboard (a screenshot, a copied image) is attached like a dropped file; text pastes as usual.
             const files = pastedFiles(e.clipboardData);
             if (!files.length)
@@ -713,11 +669,11 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
         }}/>
           <div className="st-composer__bar">
             <ComposerControls draft={draft} onDraft={setDraft} session={session} onPreview={onPreview} streaming={streaming} onSlash={() => { setSlashDismissed(false); setSlashOpen(true); requestAnimationFrame(() => textareaRef.current?.focus()); }} onError={setFileError} onAttach={(name, text) => { setDraft(`${draft}${draft ? '\n\n' : ''}Attached ${name}\n\n${text}`); requestAnimationFrame(() => textareaRef.current?.focus()); }}/>
-            {tr(streaming ? (<Btn variant="secondary" size="sm" icon="stop" onClick={stopStreaming}>{tr("Stop")}</Btn>) : (<Btn variant="primary" size="sm" icon="send" disabled={(!draft.trim() && !photos.length) || draft.trim() === '/' || (!canChat && timeSkipPrompt(draft) === null)} onClick={onSubmit}>{tr("Send")}</Btn>))}
+            {tr(streaming ? (<Btn variant="secondary" size="sm" icon="stop" onClick={stopStreaming}>{tr("Stop")}</Btn>) : (<Btn variant="primary" size="sm" icon="send" disabled={(!draft.trim() && !photos.length) || draft.trim() === '/' || !canChat} onClick={onSubmit}>{tr("Send")}</Btn>))}
           </div>
         </div>
         {tr(streaming && draft.trim() && whileBusy !== 'wait' ? <p className="xs muted composer__busy-hint" role="status">{tr(whileBusy === 'queue' ? "Enter sends it when the answer is done." : "Enter stops the answer here and sends it now.")}</p> : null)}
-        {tr(showNoModelHint({ streaming, canChat, hasText: !!draft.trim(), hasPhotos: photos.length > 0, bareSlash: draft.trim() === '/', isTimeSkip: timeSkipPrompt(draft) !== null }) ? <p className="xs muted composer__busy-hint" role="status">{tr("No model is loaded. Load one in Models to send this message.")}</p> : null)}
+        {tr(showNoModelHint({ streaming, canChat, hasText: !!draft.trim(), hasPhotos: photos.length > 0, bareSlash: draft.trim() === '/' }) ? <p className="xs muted composer__busy-hint" role="status">{tr("No model is loaded. Load one in Models to send this message.")}</p> : null)}
         <ChatTelemetry session={session}/>
         </div>
       </div>
@@ -735,28 +691,18 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
     </div>);
 }
 const Message = memo(MessageView);
-function MessageView({ message: m, isLast, onEditPrompt, onPreview, onClosePreview, onOpenLink, onOpenTimeSkip, timeSkipDone, timeSkipReal, timeSkipRun, }: {
+function MessageView({ message: m, isLast, onEditPrompt, onPreview, onClosePreview, onOpenLink, }: {
     message: ChatMessage;
     isLast: boolean;
     onEditPrompt: (text: string) => void;
     onPreview: (a: PreviewArtifact) => void;
     onClosePreview: (id: string) => void;
     onOpenLink: (url: string) => void;
-    onOpenTimeSkip: (id: string) => void;
-    timeSkipDone: boolean;
-    timeSkipReal?: boolean;
-    timeSkipRun?: TimeSkipRun;
 }) {
     useStore(s => s.language);   // memo(): a live language switch changes no prop, so the message subscribes to it and draws its words again
     const streaming = useStore(s => s.streaming);
     const activeSession = useStore(s => s.activeSession);
-    const hostLive = useStore(s => s.connection !== 'offline');
     const liveStatus = useLiveStatus(m.role === 'assistant' && m.streaming ? activeSession : null);
-    // A reply that proposed a plan shows the plan card in place of its closing text (which is the plan in prose).
-    const storedPlan = usePlanQuiet(m.planId ? activeSession : null);
-    const planCard = !!m.planId && storedPlan?.id === m.planId;
-    // A reply with activity lines is drawn piece by piece in the order it came; one without is the plain text it always was.
-    const grouped = !!m.blocks?.some(b => b.kind === 'group');
     const [sentTime, setSentTime] = useState(() => relTime(m.at));
     const sentQuote = m.role === 'user' ? parseQuoted(m.content) : null;
     // #5993: which of this message's numbered quotes still have their source message in the chat ('1' / '0' each; '' when it has none), so a deleted source shows its label without the jump
@@ -782,33 +728,24 @@ function MessageView({ message: m, isLast, onEditPrompt, onPreview, onClosePrevi
       {tr(m.reasoning ? <ReasoningBlock message={m}/> : null)}
 
 
-      {/* In a reply with activity lines the line is the one live cue for a running or finished tool (and the status line below says what it is doing now); the
-          card stays only for what needs the person: a question waiting, a denied or failed call. A card that came and went above the text moved the whole reply. */}
-      {tr((m.tools ?? []).filter(t => !grouped || t.state === 'proposed' || t.state === 'denied' || t.state === 'error').map((t) => (<ToolCard key={t.id} tool={t}/>)))}
+      {tr((m.tools ?? []).map((t) => (<ToolCard key={t.id} tool={t}/>)))}
 
-      {tr(!(m.timeSkipId && timeSkipReal && !timeSkipDone) && (m.content || m.error || !m.streaming || !liveStatus || !!m.drafts?.length) ? <div className="st-bubble">
-        {tr(planCard ? <PlanCard chatId={activeSession} planId={m.planId!}/> : null)}
+      {tr(m.content || m.error || !m.streaming || !liveStatus ? <div className="st-bubble">
         {tr(m.error ? (<ErrorNotice message={m.error} detail={m.errorDetail} {...contextRecovery(m.errorCode)}/>) : null)}
-        {tr(grouped && !planCard && !m.timeSkipId ? m.blocks!.map((b, i) => b.kind === 'group' ? <ActivityLine key={b.id} group={b} sessionId={activeSession ?? ''} onPreview={onPreview}/> : <Markdown key={i} text={b.text} onOpenLink={onOpenLink} imageSession={activeSession} previewId={`${m.id}-b${i}`} onPreview={onPreview} onClosePreview={onClosePreview}/>) : null)}
-        {tr(m.content && !planCard && !grouped ? (<Markdown text={m.timeSkipId && !timeSkipReal ? hostLive ? tr('This was a sample run made while the app could not reach its host.') : timeSkipDone ? tr('The result is ready. Switch between Original and Updated, or compare them side by side. This example uses sample outputs and simulated checks.') : tr('Revising the saved draft. Follow the result in the sidebar. This example uses sample outputs and simulated checks.') : m.content} onOpenLink={onOpenLink} imageSession={activeSession} previewId={m.id} onPreview={onPreview} onClosePreview={onClosePreview}/>) : !m.error && m.streaming && !liveStatus ? (<span className="typing" aria-label={tr("Generating")}>
+        {tr(m.content ? (<Markdown text={m.content} onOpenLink={onOpenLink} imageSession={activeSession} previewId={m.id} onPreview={onPreview} onClosePreview={onClosePreview}/>) : !m.error && m.streaming && !liveStatus ? (<span className="typing" aria-label={tr("Generating")}>
             <i />
             <i />
             <i />
           </span>) : null)}
-        {/* a file or command the model is writing right now: its name, growing size and the last lines of it (live data from the host, see ToolDraft) */}
-        {tr(m.streaming && m.drafts?.length && !planCard ? <DraftLines drafts={m.drafts} sessionId={activeSession ?? ''} onPreview={onPreview}/> : null)}
-        {/* the caret follows the text being written; after an activity line it hung on a row of its own and the reply jumped when the text went on */}
-        {tr(m.streaming && m.content && !m.drafts?.length && (!grouped || m.blocks!.at(-1)?.kind === 'text') ? <span className="caret" aria-hidden="true"/> : null)}
+        {/* the caret follows the text being written */}
+        {tr(m.streaming && m.content ? <span className="caret" aria-hidden="true"/> : null)}
       </div> : null)}
-      {tr(m.skills?.length && !m.streaming ? <SkillsUsed skills={m.skills}/> : null)}
-      {tr(m.deliverables?.length && !m.streaming ? <div className="deliverables">{m.deliverables.length >= COMPACT_FILES_FROM ? <FilesSummary files={m.deliverables} answer={m.content} sessionId={activeSession ?? ''} onPreview={onPreview}/> : <>{m.deliverables.map(f => <FileCard key={f.path} file={f} sessionId={activeSession ?? ''} onPreview={onPreview}/>)}<EditedFiles files={m.deliverables} sessionId={activeSession ?? ''} onPreview={onPreview}/></>}</div> : null)}
-      {tr(m.streaming && isLast && !m.timeSkipId ? <StatusLine sessionId={activeSession} startedAt={Date.parse(m.at) || Date.now()} tokens={m.tokens}/> : null)}
+      {tr(m.streaming && isLast ? <StatusLine sessionId={activeSession} startedAt={Date.parse(m.at) || Date.now()} tokens={m.tokens}/> : null)}
 
-      {tr(m.timeSkipId && timeSkipReal && !timeSkipDone && timeSkipRun ? <Suspense fallback={null}><TimeSkipWorking run={timeSkipRun} sessionId={activeSession ?? ''}/></Suspense> : m.timeSkipId && (!timeSkipReal || (timeSkipRun?.job?.files?.length ?? 0) > 0) ? <button className="timeskip-chat-card" onClick={() => onOpenTimeSkip(m.timeSkipId!)}><Icon name="branch" size={20}/><span><strong>{tr("Time-skip")}</strong><span>{tr(timeSkipDone ? 'Result ready · compare versions' : 'Revising · follow progress')}</span></span><Icon name="chevron" size={16} className="timeskip-card-arrow"/></button> : null)}
       {tr(m.media?.length ? <ChatMedia items={m.media} onPreview={onPreview}/> : null)}
       {tr(m.artifacts?.length ? <div className="artifact-cards">{tr(m.artifacts.map(a => <ArtifactCard key={a.id} artifact={a} onPreview={onPreview}/>))}</div> : null)}
 
-      {tr(!m.streaming && !m.timeSkipId && (m.content || m.error) ? (<div className="st-msg__meta">
+      {tr(!m.streaming && (m.content || m.error) ? (<div className="st-msg__meta">
           <span className="st-msg__actions">
             {tr(isLast ? <>
               <CopyBtn text={m.content} label="Response" title="Copy response"/>
@@ -845,26 +782,19 @@ function MessageMenu({ label, children }: {
     const trigger = useRef<HTMLButtonElement>(null);
     return <><button ref={trigger} className="st-btn st-btn--icon" aria-label={tr(label)} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}><Icon name="ellipsis" size={16}/></button>{tr(open ? <FloatingMenu anchor={trigger.current} title={tr(label)} onClose={() => setOpen(false)}><MenuCloseContext.Provider value={() => setOpen(false)}><div onClick={() => setOpen(false)}>{tr(children)}</div></MenuCloseContext.Provider></FloatingMenu> : null)}</>;
 }
-/**
- * A tool call, with the grant it needs. Approvals are per action and per turn —
- * the model never gets standing permission.
- */
+/** A tool call the model made (a connected MCP tool, say): what it did, and how it ended. */
 function ToolCard({ tool: t }: {
     tool: ToolCall;
 }) {
     const scope = SCOPE[t.scope];
-    const pending = t.state === 'proposed';
-    if (!pending && t.state !== 'running')
-        return <details className="disclosure tool-summary"><summary><Icon name="chevron" size={14}/>{tr(t.verb ?? t.name)}{t.target ? <><span>·</span><span className="tool-summary__target" title={t.target}>{t.target}</span></> : null}<span>·</span><Icon name={t.state === 'denied' || t.state === 'error' ? 'x' : 'check'} size={14}/>{tr(t.state === 'denied' ? 'Denied' : t.state === 'error' ? 'Failed' : t.live && t.state === 'done' && t.approved ? 'Approved' : 'Done')}</summary><div><code>{t.preview}</code><p className="small muted">{tr(t.result ?? t.effect)}</p></div></details>;
-    /* The question and its two buttons are in the dock above the message box (ApprovalDock), so a long reply cannot push them out of view (#4725). */
-    if (pending)
-        return <p className="approval-wait small muted" role="status"><Icon name="clock" size={14}/>{tr("Waiting for your answer below")}</p>;
+    if (t.state !== 'running' && t.state !== 'proposed')
+        return <details className="disclosure tool-summary"><summary><Icon name="chevron" size={14}/>{tr(t.verb ?? t.name)}{t.target ? <><span>·</span><span className="tool-summary__target" title={t.target}>{t.target}</span></> : null}<span>·</span><Icon name={t.state === 'denied' || t.state === 'error' ? 'x' : 'check'} size={14}/>{tr(t.state === 'denied' ? 'Denied' : t.state === 'error' ? 'Failed' : 'Done')}</summary><div><code>{t.preview}</code><p className="small muted">{tr(t.result ?? t.effect)}</p></div></details>;
     return <section className="toolcard toolcard--compact" data-state={t.state} aria-label={t.name}>
     <details className="toolcard__disclosure">
       <summary><Icon name={t.scope === 'shell' ? 'bolt' : 'tool'} size={17}/><span className="toolcard__title">{tr(t.verb ?? t.name)}</span><span className="toolcard__scope xs muted">{tr(scope.label)}</span><Icon name="chevron" className="toolcard__chevron" size={15}/></summary>
       <div className="toolcard__body"><code className="toolcard__preview">{t.preview}</code><p className="small muted">{tr(t.effect)}</p>{tr(t.result ? <p className="small">{t.result}</p> : null)}</div>
     </details>
-    <span className="xs muted toolcard__running" role="status">{tr("Running\u2026")}</span>
+    {tr(t.state === 'running' ? <span className="xs muted toolcard__running" role="status">{tr("Running\u2026")}</span> : null)}
   </section>;
 }
 export { cx };

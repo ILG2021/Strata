@@ -327,7 +327,6 @@ export async function proxyCompletion({ baseUrl, message, history = [], systemPr
           continue;
         }
         if (parsed.error) throw new Error(parsed.error.message ?? 'Inference failed.');
-        if(parsed.strata_mcp)onFrame({type:'native-tool',event:parsed.strata_mcp});
         if(parsed.timings)timings=parsed.timings;
         if(parsed.choices?.[0]?.finish_reason)finishReason=parsed.choices[0].finish_reason;
 

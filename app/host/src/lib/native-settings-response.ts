@@ -10,6 +10,5 @@ export function nativeSettingsResponse(input: unknown) {
   if (typeof response.error === 'string') throw new Error(response.error);
   return {
     values: nativeSettingsValues(response.values),
-    mcp: response.mcp === undefined ? {} : nativeSettingsValues(response.mcp),
   };
 }

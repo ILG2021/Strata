@@ -48,6 +48,26 @@ export async function checkUpdates({ appVersion, engineVersion }, fetcher = fetc
 export const engineFailedBeforeText = (offered, installed) => `Engine ${offered ?? 'update'} didn't start correctly on this computer, so Strata kept engine ${installed ?? 'in use'}. Press Update engine to try again.`;
 
 /**
+ * This fork's packaged update check: only the app's own signed updater (Tauri: latest.json on the fork's GitHub release, checked
+ * against the public key in tauri.conf.json). The engine and Control ship inside the installer, so there is no signed feed and no
+ * separate engine update: a new installer brings both. Same result shape as `checkUpdates`, so the Settings screen needs no change.
+ */
+export async function checkAppUpdates({ appUpdater, appVersion = null, engineVersion = null }) {
+  const checkedAt = new Date().toISOString();
+  const engine = { installedVersion: engineVersion, status: 'current', canInstall: false, message: 'The engine comes with the app and is updated with it.' };
+  const strata = { installedVersion: appVersion, canInstall: false };
+  try {
+    const verdict = await appUpdater.check();
+    if (verdict.available) Object.assign(strata, { status: 'available', latestVersion: verdict.version, canInstall: true, message: `A new version of Strata is available.${verdict.notes ? ` ${verdict.notes}` : ''}` });
+    else Object.assign(strata, { status: 'current', message: 'Strata is up to date.' });
+  } catch (error) {
+    if (error?.code === 'app-update-unavailable' && appUpdater.unavailable) Object.assign(strata, { status: 'unavailable', message: appUpdater.unavailable });
+    else Object.assign(strata, { status: 'error', message: "Strata couldn't check for a new version of the app itself. Try again later.", details: String(error?.message ?? error) });
+  }
+  return { checkedAt, strata, engine, serving: [] };
+}
+
+/**
  * The packaged app's update check: the signed feed, read by Control (`strata update --check`), plus the shell's own verdict
  * on the app. Same result shape as `checkUpdates`, so the Settings screen needs no change. This is the only place the host
  * reaches the feed, and only when the user presses "Check for updates".

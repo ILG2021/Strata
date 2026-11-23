@@ -6,7 +6,6 @@ import type { Task } from '../lib/tasks';
 
 const FREQUENCY: Record<string, string> = { hourly: 'Every hour', daily: 'Every day', weekdays: 'Weekdays', weekly: 'Every week' };
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MODE: Record<string, string> = { plan: 'Look only, change nothing', manual: 'Stop and tell me before changing anything', bypass: 'Bypass permissions' };
 
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString(localeTag(), { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
@@ -34,7 +33,6 @@ export function TaskDetail({ task }: { task: Task }) {
     <section className="st-card task-facts" aria-label={tr("Task summary")}>
       <div><span className="label">{tr("Schedule")}</span><strong><Icon name="clock" size={16}/>{scheduleText(task)}</strong>
         <span className="small muted">{tr(state === 'paused' ? 'Paused' : task.nextRunAt ? tr("Next: {0}", [when(task.nextRunAt)]) : 'Calculating the next run…')}</span></div>
-      <div><span className="label">{tr("What it may do")}</span><strong><Icon name="shield" size={16}/>{tr(MODE[task.mode ?? 'plan'])}</strong></div>
       <div><span className="label">{tr("Last result")}</span><strong className={result.tone}>{result.tone === 'is-good' ? <Icon name="check" size={16}/> : null}{tr(result.label)}</strong>
         <span className="small muted">{when(task.lastRunAt)}</span></div>
     </section>

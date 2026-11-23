@@ -9,21 +9,22 @@ const { code } = await transform((await read('src/lib/code-preview.ts')).replace
 const lib = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 const liquid = await read('src/styles/liquid.css');
 
-test('only HTML and Markdown blocks have a preview; each block has its own stable id', () => {
-  assert.equal(lib.codePreviewKind('html'), 'website');
-  assert.equal(lib.codePreviewKind('HTML'), 'website');
+test('only Markdown blocks have a preview (HTML is never run); each block has its own stable id', () => {
+  assert.equal(lib.codePreviewKind('html'), null, 'HTML is never run in the sidebar');
+  assert.equal(lib.codePreviewKind('HTML'), null);
   assert.equal(lib.codePreviewKind('md'), 'markdown');
   assert.equal(lib.codePreviewKind('markdown'), 'markdown');
   assert.equal(lib.codePreviewKind('bash'), null);
-  const a = lib.codePreview('m1', 'html', '<p>a</p>'), b = lib.codePreview('m1', 'html', '<p>b</p>');
+  assert.equal(lib.codePreview('m1', 'html', '<p>a</p>'), null, 'an HTML block stays a code block');
+  const a = lib.codePreview('m1', 'md', '# a'), b = lib.codePreview('m1', 'md', '# b');
   assert.notEqual(a.id, b.id, 'two blocks in one answer are two previews');
-  assert.equal(a.id, lib.codePreview('m1', 'html', '<p>a</p>').id, 'the same block keeps its id');
+  assert.equal(a.id, lib.codePreview('m1', 'md', '# a').id, 'the same block keeps its id');
   assert.equal(lib.codePreview('m1', 'bash', 'ls'), null);
 });
 
 test('a finished answer with exactly one whole HTML page goes to the sidebar by itself; snippets and several blocks do not', () => {
   const page = '<!doctype html>\n<html><body>hi</body></html>';
-  assert.equal(lib.mainCodePreview('m', `Here:\n\n\`\`\`html\n${page}\n\`\`\`\n`)?.kind, 'website');
+  assert.equal(lib.mainCodePreview('m', `Here:\n\n\`\`\`html\n${page}\n\`\`\`\n`), null, 'a whole page is not opened either');
   assert.equal(lib.mainCodePreview('m', 'A snippet:\n\n```html\n<b>x</b>\n```\n'), null);
   assert.equal(lib.mainCodePreview('m', `\`\`\`html\n${page}\n\`\`\`\n\n\`\`\`html\n${page}\n\`\`\`\n`), null);
   assert.equal(lib.mainCodePreview('m', 'Notes:\n\n```markdown\n# a\n```\n'), null, 'Markdown blocks keep the button only');

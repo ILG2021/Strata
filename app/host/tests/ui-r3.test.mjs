@@ -76,14 +76,6 @@ test('7 and 8: Model files has no explanatory sentence and holds "Other local mo
   assert.ok(!/<\/section><Btn[^>]*other-models/.test(models), 'not a separate control under the card');
 });
 
-test('12: with no subagents the dropdown is one row, "No subagents recorded" and the X, with no icon and no explanation', () => {
-  const bar = read('src/components/ChatToolbar.tsx');
-  assert.match(bar, /title=\{tr\(session\?\.agents\?\.length \? "Subagents" : "No subagents recorded"\)\}/, 'the empty state is the title');
-  assert.ok(!/subagents-empty|Subagents that run in this conversation/.test(bar), 'no icon, no explanatory text');
-  assert.ok(!/subagents-empty/.test(read('src/styles/annotation-fixes.css')), 'no dead rule');
-  assert.match(read('src/styles/app.css'), /\.telepop__head:last-child \{ align-items: center; padding-bottom: 0; margin-bottom: 0; border-bottom: 0; \}/, 'no empty body under the title');
-});
-
 test('14: the Board and Schedule help lines sit in the Tasks header after the title, smaller, and wrap rather than being cut', () => {
   const tasks = read('src/screens/Tasks.tsx'), board = read('src/components/TaskBoard.tsx'), css = read('src/styles/annotation-fixes.css');
   assert.match(tasks, /titleDetail=\{currentTask \? undefined : view === 'board' \? <span className="tasks-note"><Icon name="info" size=\{14\}\/>\{tr\('Cards move on their own as things happen\./);
@@ -132,19 +124,8 @@ test('10 (visual): the reply stays still while it streams, one live cue per step
   const chat = read('src/screens/Chat.tsx'), css = read('src/styles/annotation-fixes.css'), app = read('src/styles/app.css'), liquid = read('src/styles/liquid.css');
   // Stop and Send are one height, so the message box no longer moves 5px when a reply starts and ends.
   assert.match(css, /\.st-composer__bar > \.st-btn:not\(\.st-btn--icon\) \{ height: 32px; min-height: 32px; box-sizing: border-box; \}/);
-  // In a reply with activity lines the line is the one live cue for a tool; the running card above the text is gone.
-  assert.match(chat, /filter\(t => !grouped \|\| t\.state === 'proposed' \|\| t\.state === 'denied' \|\| t\.state === 'error'\)/);
-  // The caret follows text, never an activity line.
-  assert.match(chat, /m\.streaming && m\.content && !m\.drafts\?\.length && \(!grouped \|\| m\.blocks!\.at\(-1\)\?\.kind === 'text'\) \? <span className="caret"/);
-  // A slot for what the host knows while a run is open (AGENT-LOST feeds it): read, shown, dropped at close.
-  const { readGroup } = await lib('src/lib/deliverables.ts');
-  const open = readGroup({ id: 'g', closed: false, line: 'Writing pagoda.html', live: { label: 'Writing pagoda.html', output: 'a\nb\n412 lines written\n' } });
-  assert.deepEqual(open.live, { label: 'Writing pagoda.html', output: '412 lines written' }, 'the last line only, one fixed row');
-  assert.equal(readGroup({ id: 'g', closed: true, line: 'Wrote a file', live: { label: 'x', output: 'y' } }).live, undefined, 'a closed group has no live part');
-  assert.equal(readGroup({ id: 'g', closed: false, line: 'Ran a command' }).live, undefined, 'without data it draws as before');
-  const deliver = read('src/components/Deliverables.tsx');
-  assert.match(deliver, /live && group\.live\?\.output \? <p className="act__output"/);
-  assert.match(app, /\.act\[data-live\] \.act__line \{ color: var\(--st-ink\); \}/);
+  // The caret follows the text being written.
+  assert.match(chat, /m\.streaming && m\.content \? <span className="caret"/);
   // The sidebar preview opens and closes in 460 ms (the motion scale's own step, existing easings); reduced motion makes it 1 ms.
   assert.match(liquid, /animation: st-panel-in var\(--st-t-choreo\) var\(--st-ease-enter\) both;/);
   assert.match(liquid, /animation: st-panel-out var\(--st-t-choreo\) var\(--st-ease-exit\) both;/);
@@ -201,25 +182,3 @@ test('owner 11-01 (second decision): 128K on every card and in first-run setup',
   assert.match(guided, /options=\{contextList\.map\(n =>/);
 });
 
-test('10 (live file write): message.drafts is drawn through the open activity line: file, growing size, the tail only if it reads well, no jumps', async () => {
-  const { draftSize, draftTail, groupFromDraft } = await lib('src/lib/draft-view.ts');
-  assert.equal(draftSize(0), '0 KB'); assert.equal(draftSize(80), '80 B'); assert.equal(draftSize(7800), '7.8 KB'); assert.equal(draftSize(18720), '19 KB', 'the same thousands as the cut sentence');
-  const code = ['<!doctype html>', '<html lang="en">', '<head><meta charset="utf-8"></head>', '<script type="module">', 'const scene = new THREE.Scene();'].join('\n');
-  assert.deepEqual(draftTail(code), ['<head><meta charset="utf-8"></head>', '<script type="module">', 'const scene = new THREE.Scene();'], 'the last three lines');
-  assert.deepEqual(draftTail(''), [], 'nothing yet');
-  assert.deepEqual(draftTail('\u00e9\u0001\u0002 \u0003\u0004\u0005\u0006\u0007\u0008\u000b\u000c\u000e\u000f'), [], 'a wall of control characters is not shown');
-  assert.deepEqual(draftTail('{"a":1,"b":2,"c":3,"d":4,"e":5}'), [], 'a line without words is not shown');
-  const draft = { id: 't1', name: 'write_file', target: 'pagoda.html', bytes: 7800, lines: 165, preview: code, scope: 'write', verb: 'Writing' };
-  const g = groupFromDraft(draft, 'Writing · pagoda.html');
-  assert.equal(g.closed, false); assert.equal(g.live.bytes, 7800); assert.equal(g.live.lines, 165); assert.match(g.live.tail, /THREE\.Scene/);
-  assert.equal(groupFromDraft({ ...draft, scope: 'edit' }, 'x').live.tail, undefined, 'a tool that is not a write or a command has no text box');
-  assert.equal(groupFromDraft({ ...draft, preview: '' }, 'x').live.tail, '', 'the box is kept from the start (empty) so it does not appear later and push the text down');
-  const deliver = read('src/components/Deliverables.tsx'), chat = read('src/screens/Chat.tsx'), app = read('src/styles/app.css');
-  assert.match(deliver, /useThrottled\(drafts, 350,/, 'about five frames a second are drawn about three times a second');
-  assert.match(deliver, /<div className="act__tail" aria-hidden="true">/);
-  assert.match(chat, /m\.streaming && m\.drafts\?\.length && !planCard \? <DraftLines drafts=\{m\.drafts\}/);
-  assert.match(chat, /\|\| !!m\.drafts\?\.length\) \? <div className="st-bubble">/, 'the reply shows before any text, as soon as a file starts');
-  assert.match(chat, /!m\.drafts\?\.length && \(!grouped/, 'no caret while a file is being written');
-  assert.match(app, /\.act__tail \{[^}]*height: calc\(3 \* 1\.45 \* var\(--st-fs-xs\) \+ 16px\);[^}]*overflow: hidden;/, 'a box that is always three lines high');
-  assert.ok(!/animation|transition/.test(app.slice(app.indexOf('.act__meta {'), app.indexOf('.act__output {'))), 'nothing in the write line animates, so reduced motion has nothing to hold still');
-});

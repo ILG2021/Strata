@@ -63,12 +63,6 @@ test('the link and its muted line are in the footer every card state shares', ()
   assert.doesNotMatch(handler, /update-engine|native\/operations|from-file/);
 });
 
-test('Models settings start the custom connection when asked', () => {
-  const s = src('src/components/SettingsModels.tsx');
-  assert.match(s, /import \{ takeCustomConnectionRequest \} from '\.\.\/lib\/connect-only';/);
-  assert.match(s, /useEffect\(\(\) => \{ if \(takeCustomConnectionRequest\(\)\) \{ reset\(\); setDraft\(\{ kind: 'custom', provider: null, name: '', baseUrl: '', protocol: 'openai-chat', apiKey: '', models: \[\] \}\); \} \}, \[\]\);/);
-});
-
 test('the engine card comes back while setup is dismissed but not complete, and the Models page leads to it', () => {
   const setup = src('src/screens/Setup.tsx');
   assert.match(setup, /if \(!engineStepDone && !setup\?\.complete && \(needsEngine \|\| cardShown\)\)\s*\n\s*return <EngineFirstRun/);

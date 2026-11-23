@@ -115,31 +115,10 @@ test('hy4VisionShard, withoutHy4Vision, runtimeVision, and markPictures handle b
   assert.equal(catalog.fetchesPictures({ sourceFamily: 'hy4-flash' }, true), true);
 });
 
-test('Hy4-Flash profile uses Off/High/Max efforts (max -> max) while Qwen keeps LOCAL_EFFORTS', async () => {
-  const { buildProfile, LOCAL_EFFORTS, HY4_LOCAL_EFFORTS } = await import('../server/agent/profile.mjs');
-  const rows = p => JSON.parse(p.patch.slice(p.patch.indexOf('[')));
-  const built = buildProfile({
-    local: [
-      { id: 'h1', modelId: 'hy4-flash-sq-64', label: 'Tencent Hy4-Flash SQ-64', baseUrl: 'http://127.0.0.1:9001/v1', context: 131072, vision: true },
-      { id: 'q1', modelId: 'iq3_s', label: 'Qwen3.8-Flash-Next IQ3_S', baseUrl: 'http://127.0.0.1:9002/v1', context: 131072, vision: false },
-    ],
-    connections: [],
-  });
-  const providers = rows(built).find(e => e.id === 'llm-pi-ai').config.providers;
-  assert.deepEqual(providers['strata-local'].models[0].reasoningEfforts, HY4_LOCAL_EFFORTS);
-  assert.equal(providers['strata-local'].models[0].reasoningEfforts.max, 'max');
-  assert.deepEqual(providers['strata-local'].models[0].input, ['text', 'image']);
-  assert.equal(built.routes[0].vision, true);
-  assert.deepEqual(providers['strata-local-q1'].models[0].reasoningEfforts, LOCAL_EFFORTS);
-  assert.equal(providers['strata-local-q1'].models[0].reasoningEfforts.max, 'high');
-  assert.equal(built.routes[1].vision, false);
-});
-
 test('Hy4-Flash on-demand Vision fetch, Step 4 tune() vision preservation, and UI edge controls', async () => {
   const { readFileSync } = await import('node:fs');
   const read = rel => readFileSync(new URL(rel, import.meta.url), 'utf8');
   const nc = read('../server/native-control.mjs');
-  const bridge = read('../server/agent/agent-bridge.mjs');
   const composer = read('../src/components/ComposerControls.tsx');
   const models = read('../src/components/NativeModels.tsx');
   const guided = read('../src/components/GuidedSetup.tsx');
@@ -147,8 +126,6 @@ test('Hy4-Flash on-demand Vision fetch, Step 4 tune() vision preservation, and U
   const sidebar = read('../src/app/Sidebar.tsx');
   assert.match(nc, /vision:\(isHy4\(current\.config\)\|\|isInkling\(current\.config\)\|\|current\.config\.vision\)\?args\.vision:'no'/);
   assert.match(nc, /withoutHy4Vision/);
-  assert.match(bridge, /known\.vision === false && vision === true/);
-  assert.match(bridge, /isHy4Route = route\.kind === 'local' && \/\^hy4-flash\/i\.test/);
   assert.match(composer, /hy4Efforts = \['Off', 'High', 'Max'\]/);
   assert.match(composer, /isHy4Active[\s\S]*'High' : 'Medium'/);
   assert.match(models, /isHy4Selected = selectedFamily\?\.family === HY4_FAMILY/);

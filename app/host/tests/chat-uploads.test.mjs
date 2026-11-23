@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createUploads, parseMultipart } from '../server/chat-uploads.mjs';
 import { createAttachments } from '../server/chat-files.mjs';
-import { imageParts } from '../server/agent/agent-bridge.mjs';
 
 const PNG = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(40, 1)]);
 const multipart = (parts, boundary = 'XBOUND') => ({
@@ -44,8 +43,3 @@ test('pictures and files arrive as multipart, a data address or raw bytes; pictu
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('pictures become the Harness image parts; anything else is dropped', () => {
-  const parts = imageParts([{ url: 'data:image/png;base64,AAAA', name: 'a.png' }, { url: 'data:image/gif;base64,AAAA' }, { url: 'nope' }, null]);
-  assert.deepEqual(parts, [{ type: 'image', mediaType: 'image/png', data: 'AAAA', name: 'a.png' }]);
-  assert.deepEqual(imageParts(undefined), []);
-});

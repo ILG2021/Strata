@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { FIT_TEXT } from '../server/agent/context-fit.mjs';
 
 const here = rel => fileURLToPath(new URL(rel, import.meta.url));
 const read = rel => readFileSync(here(rel), 'utf8').replace(/\r\n/g, '\n');
@@ -24,29 +23,27 @@ const calls = [];
 globalThis.__calls = calls;
 const recovery = await load('context-recovery.ts', {
   store: `export const sendOversized = (mode) => globalThis.__calls.push(['oversized', mode]);
-          export const summarizeAndContinue = () => globalThis.__calls.push(['summarize']);
           export const startNewChat = () => globalThis.__calls.push(['new-chat']);`,
 });
 const { chatMetrics } = await load('chat-metrics.ts');
 
-test('a conversation that no longer fits offers "Summarize and continue" and "Start a new chat", never "try again"', () => {
+test('a conversation that no longer fits offers "Start a new chat", never "try again"', () => {
   const r = recovery.contextRecovery('CONTEXT_WINDOW_EXCEEDED');
-  assert.equal(r.action, 'Summarize and continue');
-  assert.equal(r.secondary.label, 'Start a new chat');
-  assert.match(r.next, /Summarize it now and continue, or start a new chat\./);
+  assert.equal(r.action, 'Start a new chat');
+  assert.equal(r.secondary, undefined);
   assert.doesNotMatch(r.next, /again/i);
   calls.length = 0;
-  r.onRetry(); r.secondary.onClick();
-  assert.deepEqual(calls, [['summarize'], ['new-chat']]);
+  r.onRetry();
+  assert.deepEqual(calls, [['new-chat']]);
 });
 
-test('a message that is too large offers the two ways that fit: a file the assistant reads in parts, or a shortened preview', () => {
+test('a message that is too large offers a shortened preview, or a new chat', () => {
   const r = recovery.contextRecovery('CONTEXT_MESSAGE_TOO_LARGE');
-  assert.equal(r.action, 'Attach as a file');
-  assert.equal(r.secondary.label, 'Send a shortened preview');
+  assert.equal(r.action, 'Send a shortened preview');
+  assert.equal(r.secondary.label, 'Start a new chat');
   calls.length = 0;
   r.onRetry(); r.secondary.onClick();
-  assert.deepEqual(calls, [['oversized', 'file'], ['oversized', 'preview']]);
+  assert.deepEqual(calls, [['oversized', 'preview'], ['new-chat']]);
 });
 
 test('any other error keeps the card as it was: one sentence, no buttons of ours', () => {
@@ -74,9 +71,7 @@ test('the store keeps the code and the engine\'s text of an error, shows a sente
   assert.match(store, /const detail = typeof frame\.details === 'string' && frame\.details \? frame\.details : failure && failure\.kind !== 'plain'/);
   assert.match(store, /\.\.\.\(detail \? \{ errorDetail: detail \} : \{\}\)/);
   assert.match(store, /type === 'context'/);
-  const summarize = store.slice(store.indexOf('export async function summarizeAndContinue'), store.indexOf('export async function sendOversized'));
-  assert.ok(summarize.indexOf("sendMessage('/compact')") > 0 && summarize.indexOf("sendMessage('Please answer my last message now.')") > summarize.indexOf("sendMessage('/compact')"), 'summarise first, then ask for the answer');
-  assert.doesNotMatch(summarize, /failed.prompt|dropFailedExchange/, 'the refused question is not sent a second time (it is already in the conversation, and a large one twice would not fit)');
+  assert.ok(!/summarizeAndContinue|'\/compact'/.test(store), 'nothing sends /compact any more');
   const oversized = store.slice(store.indexOf('export async function sendOversized'), store.indexOf('export function startNewChat'));
   assert.match(oversized, /'\/api\/chat\/oversize'/);
   assert.ok(oversized.indexOf('dropFailedExchange') > oversized.indexOf("'/api/chat/oversize'"), 'the failed message stays until the shorter one is ready');
@@ -105,7 +100,7 @@ test('every sentence about the context is in the catalog in all nine languages, 
   const langs = ['en', 'zh', 'ja', 'de', 'es', 'ru', 'pt', 'ko', 'fr', 'he'];
   const catalogs = Object.fromEntries(langs.map(l => [l, JSON.parse(read(`../src/locales/${l}.json`))]));
   const idOf = text => Object.entries(catalogs.en).find(([, v]) => v === text)?.[0];
-  const sentences = [...Object.values(FIT_TEXT), 'Attach as a file', 'Send a shortened preview', 'Summarize and continue', 'Start a new chat',
+  const sentences = ['Send a shortened preview', 'Start a new chat',
     'The message could not be prepared. Try a shorter message.', 'The last Strata session is still closing down.', 'Wait a moment and try again. If it keeps happening, restart the computer.'];
   const slots = t => (t.match(/\{\d+\}/g) ?? []).sort().join();
   for (const text of sentences) {
@@ -120,16 +115,10 @@ test('every sentence about the context is in the catalog in all nine languages, 
   }
 });
 
-test('the command menu offers /compact, and picking it summarises the chat at once (it used to say "No command matches")', () => {
+test('the command menu has no /compact any more', () => {
   const chat = read('../src/screens/Chat.tsx');
   const menu = chat.slice(chat.indexOf('function useSlashCommands'), chat.indexOf('function SlashMenu'));
-  assert.match(menu, /\{ id: 'compact', label: '\/compact', hint: '([^']+)', icon: 'layers', run: \(\) => \{ clear\(\); void sendMessage\('\/compact'\); \} \}/);
-  const hint = /id: 'compact', label: '\/compact', hint: '([^']+)'/.exec(menu)[1];
-  for (const l of ['en', 'zh', 'ja', 'de', 'es', 'ru', 'pt', 'ko', 'fr', 'he']) {
-    const t = JSON.parse(read(`../src/locales/fix-${l}.json`)).fx86;
-    assert.ok(typeof t === 'string' && t.trim(), `fx86 in ${l}`);
-    if (l === 'en') assert.equal(t, hint); else assert.notEqual(t, hint, `fx86 is translated in ${l}`);
-  }
+  assert.doesNotMatch(menu, /'\/compact'/);
 });
 
 test('a command that runs at once clears only the "/..." typed to find it, never a message being written (PR #5092 review)', () => {

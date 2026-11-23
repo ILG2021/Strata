@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createModelProviders } from '../server/model-providers.mjs';
 
 const streamAbort = await import('../server/stream-abort.mjs').catch(() => null);   // (so that a host without it fails the tests below, not the loading of the file)
 const cancelOnAbort = (...args) => { assert.ok(streamAbort?.cancelOnAbort, 'server/stream-abort.mjs exists'); return streamAbort.cancelOnAbort(...args); };
@@ -43,24 +42,3 @@ test('cancelOnAbort: a signal that is already aborted cancels at once; no signal
   assert.equal(cancelled, 1, 'a finished stream is not cancelled by a later abort');
 });
 
-test('a model API answer that is being streamed ends when the person leaves, even when fetch itself does not hear the abort', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'strata-stream-abort-'));
-  try {
-    let cancelled = false;
-    const enc = new TextEncoder();
-    // a model server that went quiet after one piece, and a fetch that ignores the signal (the case Node's weak link leaves)
-    const fetchImpl = async () => new Response(new ReadableStream({
-      start(controller) { controller.enqueue(enc.encode('data: {"choices":[{"index":0,"delta":{"content":"Hel"}}]}\n\n')); },
-      pull: () => new Promise(() => {}),
-      cancel: () => { cancelled = true; },
-    }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
-    const service = createModelProviders({ directory, fetchImpl });
-    const connection = service.save({ kind: 'custom', name: 'Quiet', baseUrl: 'http://127.0.0.1:9/v1', protocol: 'openai-chat', apiKey: 'k', models: [{ id: 'quiet', reasoning: false }] }).connections[0];
-    const controller = new AbortController();
-    const frames = [];
-    const streaming = service.stream({ selection: { connectionId: connection.id, modelId: 'quiet' }, message: 'hi', history: [], signal: controller.signal, onFrame: frame => { frames.push(frame); if (frame.type === 'delta') controller.abort(new DOMException('Cancelled by the user', 'AbortError')); } });
-    await assert.rejects(within(streaming, 3000, 'the stream after the person left'), error => { assert.equal(error.name, 'AbortError'); return true; });
-    assert.ok(frames.some(f => f.type === 'delta'), 'the piece that came before was shown');
-    assert.equal(cancelled, true, 'the connection to the model was closed');
-  } finally { rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); }
-});

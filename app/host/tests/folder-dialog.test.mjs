@@ -117,7 +117,7 @@ async function startHost() {
   throw new Error('the host did not become healthy');
 }
 
-test('the host accepts a typed folder path for the picker and for adding a skill, on every OS', { timeout: 60000 }, async () => {
+test('the host accepts a typed folder path for the picker, on every OS', { timeout: 60000 }, async () => {
   const { child, base, home } = await startHost();
   const skill = await mkdtemp(join(tmpdir(), 'strata-skill-'));
   try {
@@ -127,13 +127,6 @@ test('the host accepts a typed folder path for the picker and for adding a skill
     r = await post('/api/workspaces/pick', { path: join(skill, 'nope') });
     assert.equal(r.status, 400);
     assert.match((await r.json()).error, /does not exist/);
-    r = await post('/api/skills/add', { path: skill });
-    assert.equal(r.status, 400);
-    assert.match((await r.json()).error, /no SKILL\.md/);
-    await writeFile(join(skill, 'SKILL.md'), '---\nname: Typed\n---\nbody\n');
-    r = await post('/api/skills/add', { path: skill });
-    assert.equal(r.status, 200);
-    assert.ok((await r.json()).added);
   } finally {
     child.kill();
     await rm(skill, { recursive: true, force: true });

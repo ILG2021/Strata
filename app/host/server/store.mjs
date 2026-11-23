@@ -45,8 +45,6 @@ const DEFAULTS = {
   },
   expert: {}, // id -> value
   serving: { otherDevices: false, apiKey: null, pauseServing: false },
-  // When the assistant summarises an old part of a chat (Settings -> Chat). null = not chosen: the environment and Strata's own default decide.
-  agentChat: { thresholdRatio: null, headroomFraction: null, helperLimitMin: null },
 };
 
 function read() {

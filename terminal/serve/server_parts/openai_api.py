@@ -161,13 +161,11 @@ def _is_json(text: str) -> bool:
 
 
 def openai_collect(chunks) -> dict:
-    content, reasoning, by_index, last, mcp = [], [], {}, None, []
+    content, reasoning, by_index, last = [], [], {}, None
     lps = {}                                       # "content" / "reasoning_content" -> logprob entries
     for c in chunks:
         if c is None:                              # a heartbeat
             continue
-        if c.get("strata_mcp"):
-            mcp.append(c["strata_mcp"])
         for k, v in (c["choices"][0].get("logprobs") or {}).items():
             lps.setdefault(k, []).extend(v)
         d = c["choices"][0]["delta"]
@@ -193,8 +191,6 @@ def openai_collect(chunks) -> dict:
         msg["reasoning_content"] = "".join(reasoning)
     if calls:
         msg["tool_calls"] = calls
-    if mcp:
-        msg["strata_mcp"] = mcp
     out = {"id": last["id"], "object": "chat.completion", "created": last["created"], "model": last["model"],
            "choices": [{"index": 0, "message": msg, "finish_reason": last["choices"][0]["finish_reason"]}],
            "usage": last["usage"]}

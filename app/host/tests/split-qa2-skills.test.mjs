@@ -18,33 +18,10 @@ async function startHost(home) {
     const response = await fetch(base + path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
     return { status: response.status, data: await response.json() };
   };
-  for (let i = 0; i < 100; i++) { try { if ((await call('/api/skills')).status === 200) break; } catch { /* not up yet */ } await new Promise(r => setTimeout(r, 100)); }
+  for (let i = 0; i < 100; i++) { try { if ((await call('/api/health')).status === 200) break; } catch { /* not up yet */ } await new Promise(r => setTimeout(r, 100)); }
   const stopped = new Promise(r => child.once('exit', r));
   return { call, stop: async () => { child.kill(); await stopped; } };
 }
-
-test('a skill created with Skill enabled off is saved off, kept after a restart, and an enabled one stays on', { timeout: 60000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-qa2-skill-'));
-  let host = await startHost(home);
-  try {
-    const off = await host.call('/api/skills', 'POST', { name: 'QA disabled creation check', description: 'a', body: 'Harmless test instructions.', enabled: false, triggers: ['qa check', ' ', 'qa check', 'disabled'] });
-    assert.equal(off.status, 201);
-    const row = off.data.skills.find(s => s.id === off.data.id);
-    assert.equal(row.enabled, false, 'the answer to the save already says off');
-    assert.deepEqual(row.triggers, ['qa check', 'disabled']);
-    const on = await host.call('/api/skills', 'POST', { name: 'QA enabled one', description: '', body: 'More instructions.', enabled: true });
-    assert.equal(on.data.skills.find(s => s.id === on.data.id).enabled, true);
-    const plain = await host.call('/api/skills', 'POST', { name: 'QA no flag', body: 'Older callers send no flag.' });
-    assert.equal(plain.data.skills.find(s => s.id === plain.data.id).enabled, true, 'no flag keeps the old behaviour: on');
-    assert.equal((await host.call('/api/skills', 'POST', { name: 'Bad', body: 'x', triggers: 'not a list' })).status, 400);
-    await host.stop();
-    host = await startHost(home);
-    const again = (await host.call('/api/skills')).data;
-    assert.equal(again.find(s => s.id === off.data.id).enabled, false, 'still off after a restart');
-    assert.deepEqual(again.find(s => s.id === off.data.id).triggers, ['qa check', 'disabled']);
-    assert.equal(again.find(s => s.id === on.data.id).enabled, true);
-  } finally { await host.stop(); await rm(home, { recursive: true, force: true, maxRetries: 3 }).catch(() => {}); }
-});
 
 test('F05: the host refuses an output limit below 0 or above its maximum, and keeps the saved one', { timeout: 60000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'strata-qa2-tokens-'));

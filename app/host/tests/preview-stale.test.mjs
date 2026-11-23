@@ -147,6 +147,4 @@ test('the three places are changed together', () => {
   assert.match(panel, /const version = useMemo\(\(\) => current \? previewVersion\(current\) : '', \[current\]\)/);
   // the reading view is reset by the file, not by its content
   assert.match(panel, /setMode\('preview'\);[\s\S]*?\}, \[current\?\.id\]\);/);
-  const deliver = readFileSync(resolve(root, 'src/lib/deliverables.ts'), 'utf8');
-  assert.match(deliver, /version = a\.mtime !== undefined/);
 });

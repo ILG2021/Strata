@@ -165,7 +165,7 @@ def add_parsers(sp: argparse._SubParsersAction) -> list[argparse.ArgumentParser]
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Shows the settings file and environment an app needs to talk to the Strata server that `strata launch` started. "
                     "Without a name it lists the apps. With --write it writes the file after asking, keeping a backup of any file it replaces.")
-    c.add_argument("harness", nargs="?", help="opencode, codex, claude-code, omp, pi, hermes, openclaw, deepseek-harness")
+    c.add_argument("harness", nargs="?", help="opencode, codex, claude-code, omp, pi, hermes, openclaw")
     c.add_argument("--url", metavar="URL", help="the server address (default: the running launch, else http://127.0.0.1:8080)")
     c.add_argument("--key", metavar="KEY", help="the API key (default: the running launch's)")
     c.add_argument("--key-env", metavar="NAME", help="read the key from this environment variable")

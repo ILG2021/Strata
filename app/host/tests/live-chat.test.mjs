@@ -1,4 +1,4 @@
-/** Items 1, 2 and 5: the live status line, the reasoning row and the goal state, as the pure logic the page uses. */
+/** Items 1 and 2: the live status line and the reasoning row, as the pure logic the page uses. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -13,7 +13,6 @@ globalThis.navigator ??= { language: 'en' };
 
 const status = await load('live-status.ts');
 const reasoning = await load('reasoning.ts');
-const goal = await load('goal.ts');
 
 test('item 1: only the newest status frame is kept, and idle, a missing phase or done clears it', () => {
   const chat = 'c1';
@@ -25,7 +24,7 @@ test('item 1: only the newest status frame is kept, and idle, a missing phase or
   assert.equal(status.statusOf(chat).phase, 'preparing');
   status.applyStatusFrame(chat, { seq: 3, phase: 'idle', code: 'idle', text: '' });
   assert.equal(status.statusOf(chat), null, 'idle removes the line');
-  status.applyStatusFrame(chat, { seq: 4, phase: 'goal', code: 'goal-step', text: 'Working on the goal…', args: { round: 1 } });
+  status.applyStatusFrame(chat, { seq: 4, phase: 'thinking', code: 'thinking', text: 'Thinking…' });
   status.clearStatus(chat);
   assert.equal(status.statusOf(chat), null, 'done and error clear it too');
 });
@@ -38,7 +37,6 @@ test('item 1 (0.2.16, owner): the line says what the model does now - no playful
   assert.equal(status.statusWords(frame('preparing', 'preparing-tool', { tool: 'write', verb: 'Writing a file', target: 'pagoda.html' }), 5), 'Writing file pagoda.html…');
   assert.equal(status.statusWords(frame('preparing', 'preparing-tool', { verb: 'Writing a file', target: 'pagoda.html' }), 5), 'Writing a file · pagoda.html…', 'a frame without the tool name keeps its verb');
   assert.equal(status.statusWords(frame('tool', 'tool', { verb: 'Searching the web' }), 9), 'Searching the web…');
-  assert.equal(status.statusWords(frame('goal', 'goal-step', { round: 2 }), 7), 'Working on the goal…');
   assert.equal(status.isPlayful(frame('thinking', 'thinking')), false);
   assert.equal(status.isPlayful(frame('tool', 'tool')), false);
   assert.equal(status.elapsedText(0, 14_000), '14s'); assert.equal(status.elapsedText(0, 64_000), '1m 04s');
@@ -54,13 +52,3 @@ test('item 2: the reasoning row shows what it is thinking about, then how long i
   assert.equal(reasoning.atBottom({ scrollHeight: 500, scrollTop: 100, clientHeight: 160 }), false, 'scrolled up: stop following');
 });
 
-test('item 5: the goal object from a frame, an event or a route; anything else is "no goal"', () => {
-  assert.equal(goal.readGoal(null), null); assert.equal(goal.readGoal({ objective: '', phase: 'active' }), null); assert.equal(goal.readGoal({ objective: 'x', phase: 'weird' }), null);
-  const g = goal.readGoal({ objective: 'Build the page', phase: 'blocked', round: 2, maxRounds: 5, blocked: 'It needs a folder.' });
-  assert.deepEqual(g, { objective: 'Build the page', phase: 'blocked', round: 2, maxRounds: 5, blocked: 'It needs a folder.' });
-  goal.applyGoalFrame('chat-g', { objective: 'Ship it', phase: 'active', round: 1, maxRounds: 3 });
-  assert.equal(goal.goalOf('chat-g').objective, 'Ship it');
-  goal.applyGoalFrame('chat-g', null);
-  assert.equal(goal.goalOf('chat-g'), null, 'the host clearing the goal removes the bar');
-  assert.equal(goal.goalProgress, undefined, 'no step counter is shown for a goal');
-});

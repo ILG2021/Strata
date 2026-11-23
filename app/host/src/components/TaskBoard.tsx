@@ -1,9 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { tr, localeTag } from '../lib/i18n';
 import { api } from '../lib/client';
-import { go, answerChatTool, continueChatInNewChat, continueTaskInNewChat, dismissChat, selectSession, stopChat, stopLoop } from '../lib/store';
+import { go, continueChatInNewChat, continueTaskInNewChat, dismissChat, selectSession, stopChat, stopLoop } from '../lib/store';
 import { pushToast } from '../lib/store';
-import { askQuestion } from '../lib/ask';
 import { LOOP_MAX_FAILURES, loopEvery } from '../lib/loop';
 import { plainFailure } from '../lib/plain-errors';
 import { userError } from '../lib/format';
@@ -13,14 +12,13 @@ import { Btn, Icon, IconBtn, type IconName } from './ui';
 import { FloatingMenu } from './FloatingMenu';
 
 /**
- * The task board: what is running, what waits for a yes, what found a problem and what finished, in four columns. The cards come from
+ * The task board: what is running, what found a problem and what finished, in three columns. The cards come from
  * src/lib/board.ts; this file only draws them and calls the same endpoints and store functions the rest of the app uses. Cards are not
  * dragged: they move by themselves when the facts change.
  */
 
-const COLUMNS: { id: BoardColumn; name: string; hint?: string; tone: 'run' | 'wait' | 'bad' | 'done' }[] = [
+const COLUMNS: { id: BoardColumn; name: string; hint?: string; tone: 'run' | 'bad' | 'done' }[] = [
   { id: 'running', name: 'Running', tone: 'run' },
-  { id: 'waiting', name: 'Waiting for you', hint: 'Stopped at a question only you can answer.', tone: 'wait' },
   { id: 'attention', name: 'Needs attention', hint: 'Found a problem. Stays here until you deal with it.', tone: 'bad' },
   { id: 'done', name: 'Done', hint: 'Finished cleanly in the last 7 days.', tone: 'done' },
 ];
@@ -32,8 +30,6 @@ const ACTION: Record<BoardAction, { label: string; icon?: IconName }> = {
   'open-chat': { label: 'Open chat', icon: 'chat' },
   'stop-chat': { label: 'Stop chat', icon: 'stop' },
   'stop-loop': { label: 'Stop loop', icon: 'stop' },
-  approve: { label: 'Approve', icon: 'check' },
-  deny: { label: 'Deny' },
   continue: { label: 'Continue in a new chat', icon: 'chat' },
   dismiss: { label: 'Dismiss', icon: 'x' },
   'view-result': { label: 'View result' },
@@ -66,7 +62,6 @@ function day(at: number, now: number) {
 export function cardTime(card: BoardCard, now: number): string {
   switch (card.timeKind) {
     case 'started': return tr('started {0}', [ago(now - card.at)]);
-    case 'waiting': return tr('waiting {0}', [span(now - card.at)]);
     case 'next': return card.nextAt && card.nextAt > now ? tr('next in {0}', [span(card.nextAt - now)]) : tr('answering now');
     case 'stopped': return tr('stopped {0}', [now - card.at < 86_400_000 ? clock(card.at) : day(card.at, now)]);
     default: return card.source === 'task' ? day(card.at, now) : now - card.at < 86_400_000 ? ago(now - card.at) : day(card.at, now);
@@ -87,9 +82,8 @@ function ReasonText({ reason }: { reason: BoardReason }) {
     }
     case 'task-stopped': text = tr('This run was stopped before it finished.'); break;
     case 'task-closed': text = tr('Strata closed while this was running, so it did not finish.'); break;
-    case 'task-needs-yes': text = tr('Finished, but wanted to change something and could not ask. Nothing was changed.'); break;
     case 'loop-failed': text = tr('Stopped: {0} runs in a row did not work.', [LOOP_MAX_FAILURES]); break;
-    default: text = reason.ask ? askQuestion(reason.ask) : reason.fallback ?? '';
+    default: text = '';
   }
   return <span>{text}{raw ? <details className="bcard__detail"><summary>{tr('Details')}</summary><pre>{raw}</pre></details> : null}</span>;
 }
@@ -108,11 +102,7 @@ function Card({ card, now, busy, canRun, run, openMenu }: { card: BoardCard; now
   const iconFor = (action: BoardAction, label?: string) => <IconBtn key={action} name={ACTION[action].icon ?? 'x'} title={tr(label ?? ACTION[action].label)} disabled={busy} onClick={() => run(card, action)}/>;
 
   let actions: ReactNode;
-  if (card.column === 'waiting') {
-    actions = card.approve
-      ? <>{button('approve', 'primary')}{button('deny', 'secondary')}<span className="spacer"/>{iconFor('open-chat')}</>
-      : <>{button(card.primary, 'secondary')}</>;
-  } else if (card.column === 'done') {
+  if (card.column === 'done') {
     actions = <>{card.chip ? <span className={`bchip${card.chip.tone === 'good' ? ' bchip--good' : ''}`}><Icon name="check" size={12}/>{tr(card.chip.text)}</span> : null}<span className="spacer"/>{button(card.primary, 'ghost')}{iconFor('dismiss')}</>;
   } else {
     const variant = card.column === 'attention' ? 'primary' : 'secondary';
@@ -152,7 +142,6 @@ export function TaskBoard({ query, canRun, onViewResult }: { query: string; canR
       else if (action === 'view-result') onViewResult(card.id);
       else if (action === 'stop-chat') stopChat(card.id);
       else if (action === 'stop-loop') stopLoop(card.id);
-      else if (action === 'approve' || action === 'deny') { if (card.approve) answerChatTool(card.id, card.approve.messageId, card.approve.toolId, action === 'approve'); }
       else if (action === 'continue') { if (task) continueTaskInNewChat(task); else continueChatInNewChat(card.id); }
       else if (action === 'dismiss' && card.source !== 'task') dismissChat(card.id);
       else return false;

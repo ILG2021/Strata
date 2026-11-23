@@ -1,6 +1,6 @@
 /**
- * Every build and staging script must at least parse. A string literal broken over two lines in stage-harness.mjs (2026-10-17) made
- * every Harness staging fail with a SyntaxError, on every operating system, and nothing noticed until a build was started.
+ * Every build and staging script must at least parse. A string literal broken over two lines in a staging script (2026-10-17) made
+ * every staging fail with a SyntaxError, on every operating system, and nothing noticed until a build was started.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

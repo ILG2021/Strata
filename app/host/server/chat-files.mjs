@@ -10,7 +10,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, realpathSync } from 'node:fs';
-import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { externalEnvironment } from './external-env.mjs';
 
@@ -124,7 +124,19 @@ export function openFile(root, rawPath, how = 'app', { platform = process.platfo
 // ---- previews, raw bytes and "attach as context" -----------------------------------------------------------------------------------
 
 import { readFileSync as readBytes } from 'node:fs';
-import { fileType } from './agent/deliverables.mjs';
+
+/** The kind of a file, from its extension (html, markdown, pdf, csv, image, code, text, other). */
+const TYPES = {
+  html: ['html', 'htm'], markdown: ['md', 'markdown'], pdf: ['pdf'], csv: ['csv', 'tsv'],
+  image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'],
+  code: ['js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'cs', 'sh', 'ps1', 'bat', 'css', 'json', 'yaml', 'yml', 'toml', 'xml', 'sql', 'rb', 'php', 'swift', 'kt'],
+  text: ['txt', 'log', 'ini', 'cfg'],
+};
+function fileType(path) {
+  const ext = extname(String(path)).slice(1).toLowerCase();
+  for (const [type, list] of Object.entries(TYPES)) if (list.includes(ext)) return type;
+  return 'other';
+}
 
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon', pdf: 'application/pdf' };
 export const mimeOf = file => MIME[String(file).split('.').pop().toLowerCase()] ?? 'application/octet-stream';

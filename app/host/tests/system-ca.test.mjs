@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { useSystemCertificates } from '../server/system-ca.mjs';
-import { agentEnvironment } from '../server/agent/harness-runtime.mjs';
 
 const fake = (system, bundled = ['B1', 'B2']) => {
   const calls = [];
@@ -35,8 +34,3 @@ test('the real Node of this machine can read its system store', () => {
   assert.ok(Array.isArray(tls.getCACertificates('system')));
 });
 
-test('the agent process is started with NODE_USE_SYSTEM_CA=1, and no switch turns verification off', () => {
-  const env = agentEnvironment({ PATH: 'x' }, {});
-  assert.equal(env.NODE_USE_SYSTEM_CA, '1');
-  assert.ok(!('NODE_TLS_REJECT_UNAUTHORIZED' in env));
-});

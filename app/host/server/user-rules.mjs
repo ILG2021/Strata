@@ -1,9 +1,8 @@
 /**
  * The person's own rules for every answer (#5084): one plain-text file, `<data>/agent/home/AGENTS.md`.
  *
- * That is the user-global AGENTS.md the Harness already reads in agent mode (its agent-instructions plugin looks in DSH_HOME, which the
- * host sets to `<data>/agent/home`), so the coding assistant picks the rules up by itself. The plain chat paths (the local model and an
- * API connection) get the same text through `promptBlock()`. Empty or missing rules add nothing at all, so the system prompt stays
+ * The path is kept from earlier versions so saved rules survive an update. The chat paths (the local model and an API connection) get
+ * the text through `promptBlock()`. Empty or missing rules add nothing at all, so the system prompt stays
  * byte-identical to the one without this feature and the engine's prompt cache is unaffected.
  *
  * Writes carry the revision the editor read: a save over a file another window changed since is refused (409), never merged silently.
@@ -12,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-/** The Harness plugin's own limit (preset.mjs: agent-instructions maxBytes 65536); the editor keeps to it so agent mode reads all of it. */
+/** The largest rules file, in UTF-8 bytes; the editor keeps to it. */
 export const RULES_MAX_BYTES = 65536;
 
 export class RulesError extends Error {

@@ -15,7 +15,7 @@ test('the message row is a memoised component', () => {
 
 test('the list passes handlers whose identity never changes', () => {
   assert.match(chat, /const messageHandlers = useMemo\(\(\) => \(\{[\s\S]*?\}\), \[\]\)/);
-  for (const name of ['onEditPrompt', 'onPreview', 'onOpenTimeSkip', 'onOpenLink'])
+  for (const name of ['onEditPrompt', 'onPreview', 'onOpenLink'])
     assert.match(chat, new RegExp(`${name}=\{messageHandlers\.${name}\}`), name);
   assert.doesNotMatch(chat, /onEditPrompt=\{editPrompt\}/);
 });

@@ -807,16 +807,9 @@ $("req-all").addEventListener("click", () => { reqShowAll = !reqShowAll; if (las
 // Tools from the MCP servers in the run config: the chat offers them to the model (opt-in per request,
 // "strata_mcp": true, which only this page sends); the Monitor lists the servers and what they offer.
 let mcpInfo = {servers: [], tools: 0}, mcpRetry = null;
-async function loadMcp() {
-  try {
-    const r = await fetch("mcp", {headers: headers()});
-    if (!r.ok) return;
-    mcpInfo = await r.json();
-  } catch (e) { return; /* an older server: no MCP */ }
-  renderMcp();
-  clearTimeout(mcpRetry);                          // right after the start, servers may still be starting (npx downloads)
-  if ((mcpInfo.servers || []).some((s) => s.status === "starting")) mcpRetry = setTimeout(loadMcp, 3000);
-}
+// MCP tool servers were removed from this fork (privacy): the server has no /mcp and runs no tools, so the card and the
+// switch stay hidden.
+async function loadMcp() { renderMcp(); }
 const MCP_STATE = {ready: ["st-badge--generating", "Connected"], starting: ["st-badge--reading", "Starting"],
                    failed: ["st-badge--error", "Failed"], stopped: ["st-badge--queued", "Stopped"], idle: ["", "Waiting"]};
 function renderMcp() {
@@ -1450,7 +1443,6 @@ async function generateReply(opts = {}) {
     delete body.top_p; delete body.top_k;
   }
   if (projectionLoaded()) body.experimental_speed_projection = !!settings.esp;
-  if (settings.mcp !== false && mcpInfo.tools > 0) body.strata_mcp = true;   // this server may run MCP tools for it
 
   let firstAt = null, thinkStart = null, usage = null, frame = 0;
   const paint = () => { frame = 0; updateAssistant(el, m, true); scrollDown(); };

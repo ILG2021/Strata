@@ -45,8 +45,6 @@ test('F07: a page opened from another computer says why Add skill cannot work in
   const fn = new Function(`${source.slice(source.indexOf('export function pageIsOnThisComputer')).replace('export function', 'function')}; return pageIsOnThisComputer;`.replace(/: string|: boolean/g, ''))();
   for (const yes of ['localhost', '127.0.0.1', '127.1.2.3', '[::1]', '::1']) assert.equal(fn(yes), true, yes);
   for (const no of ['192.168.1.5', 'strata.example.com', 'my-pc.trycloudflare.com']) assert.equal(fn(no), false, no);
-  const skills = (await readFile(new URL('../src/screens/Skills.tsx', import.meta.url), 'utf8'));
-  assert.match(skills, /pageIsOnThisComputer\(window\.location\.hostname\)/);
   void pick;
 });
 
@@ -57,13 +55,6 @@ test('F08: the message box stops at 30% of the window height (44 to 180 px) and 
   const css = await readFile(new URL('../src/styles/annotation-fixes.css', import.meta.url), 'utf8');
   assert.match(css, /\.composer \.st-composer textarea \{ max-height: clamp\(44px, 30dvh, 180px\); overflow-y: auto; \}/);
   assert.match(await readFile(new URL('../src/screens/Chat.tsx', import.meta.url), 'utf8'), /composerCap\(window\.innerHeight\)/);
-});
-
-test('O02: the screenshot Download button saves the picture and then says so', async () => {
-  const source = (await readFile(new URL('../src/components/SnapshotDialog.tsx', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-  assert.match(source, /onClick=\{\(\) => saveSnapshotWithNotice\(data\)\}>\{tr\("Download"\)\}/);
-  assert.match(source, /downloadSnapshot\(data\);\n\s+pushToast\('success'/);
-  assert.match(source, /pushToast\('error', tr\('The screenshot was not saved'\)/);
 });
 
 test('item 1: the desktop window leaves file drops to the page, and the drop box is animated', async () => {

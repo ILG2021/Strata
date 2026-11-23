@@ -1,4 +1,5 @@
-import { rawUrlOf } from './deliverables';
+/** A file inside the chat's folder, as the host serves it. */
+const rawUrlOf = (sessionId: string, path: string) => `/api/files/raw?sessionId=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(path)}`;
 
 /**
  * Which picture addresses a model's Markdown may put in an <img> (tools and images review O3, 2026-10-22).

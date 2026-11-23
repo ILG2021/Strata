@@ -23,7 +23,6 @@ const ModelRunScreen = lazyScreen(() => import('../screens/ModelRun'), (m) => m.
 const ServingScreen = lazyScreen(() => import('../screens/Serving'), (m) => m.ServingScreen);
 const MonitorScreen = lazyScreen(() => import('../screens/Monitor'), (m) => m.MonitorScreen);
 const TasksScreen = lazyScreen(() => import('../screens/Tasks'), (m) => m.TasksScreen);
-const SkillsScreen = lazyScreen(() => import('../screens/Skills'), (m) => m.SkillsScreen);
 function AppShell() {
     useStore(s => s.language);
     const location = useLocation();
@@ -182,8 +181,6 @@ function RouteView({ route }: {
             return <MonitorScreen />;
         case 'tasks':
             return <TasksScreen />;
-        case 'skills':
-            return <SkillsScreen />;
         default:
             return <ChatScreen />;
     }

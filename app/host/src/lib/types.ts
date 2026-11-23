@@ -126,20 +126,6 @@ export interface ImageModelLibrary {
   variants: ImageModelVariant[];
 }
 
-export type ModelProtocol = 'openai-chat' | 'openai-responses' | 'anthropic';
-export interface ApiModel { id: string; name: string; contextMax?: number | null; /** What the person ticked ("This model reads pictures"): true, false, or null for not set. */ vision?: boolean | null; /** The answer in use: the tick, else what the server said; null when nobody knows. */ reads?: boolean | null; /** The provider says the model can think (OpenRouter's supported_parameters): the Reasoning menu then works. */ reasoning?: boolean | null; thinks?: boolean | null }
-export interface ModelProviderPreset { id: string; name: string; baseUrl: string; protocol: ModelProtocol; baseUrlHint?: string }
-export interface ModelConnection {
-  id: string; kind: 'provider' | 'custom'; provider: string | null; name: string;
-  baseUrl: string; protocol: ModelProtocol; apiKeySet: boolean; models: ApiModel[];
-}
-export interface ModelProviders { catalog: ModelProviderPreset[]; connections: ModelConnection[] }
-export interface RemoteModelSelection { connectionId: string; modelId: string }
-export interface ModelConnectionDraft {
-  id?: string; kind: 'provider' | 'custom'; provider: string | null; name: string;
-  baseUrl: string; protocol: ModelProtocol; apiKey: string; clearKey?: boolean; models: ApiModel[];
-}
-
 export type Effort = 'fastest' | 'balanced' | 'quality' | 'max';
 
 export interface BeginnerConfig {
@@ -241,8 +227,6 @@ export interface ServingState {
   stats: { running: number; waiting: number; completed: number; failed: number; tokensOut: number };
   requests: ServeRequest[];
   pauseServing: boolean;
-  /** #5661: models whose MCP tools an API client of this computer may use (opt-in, default none). */
-  mcpTools?: string[];
   /** Origins of pages that may use /v1 without an API key besides the app's own (no UI; PATCH /api/serving). */
   trustedOrigins?: string[];
 }
@@ -308,7 +292,6 @@ export interface MonitorState {
   history: MonitorSample[];
   requests?: ServeRequest[];
   conversationCache?: { enabled?:boolean; parked?:number; slots?:number; memoryGb?:number; budgetGb?:number; parks?:number; restores?:number; evictions?:number; lastEvent?:string; lastAt?:number; lastTokens?:number; requests?:number;requestsReused?:number;lastPrompt?:number;lastReused?:number; source:string };
-  mcp?: { servers:{ name:string; state:string; transport?:string; info?:{name?:string;version?:string}; error?:string; tools:{name:string;description?:string}[] }[]; tools:number };
   totals: {
     promptMs?: number;
     decodeMs?: number;
@@ -326,24 +309,11 @@ export interface MonitorState {
 }
 
 export interface ChatMessage {
-  /** Tool calls the model is writing right now (a file, a command): live data for the writing card; see ToolDraft. */
-  drafts?: ToolDraft[];
   /** The person's message is written with Markdown (a task handover: bold headings and lists), so the bubble draws it as such. */
   markdown?: boolean;
   photos?:import('./chat-photos').ChatPhoto[];
   /** #5993: where each numbered quote of this message came from ([1], [2] ...), so the transcript can label it and jump to it. */
   quotes?: import('./quotes').QuoteSource[];
-  /** Reply came from a saved API connection, rather than the local engine. */
-  remoteModel?: boolean;
-  timeSkipId?: string;
-  /** The plan this reply proposed: shown as the plan card in place of the reply text. */
-  planId?: string;
-  /** The reply in the order it came: text and grouped activity lines (round 8, item 12). Absent on older replies. */
-  blocks?: import('./deliverables').MessageBlock[];
-  /** The saved skills this reply used (the line under the answer), in the order they were loaded. */
-  skills?: { name: string; description: string }[];
-  /** Files the assistant made or changed in this reply, one card each. */
-  deliverables?: import('./deliverables').Deliverable[];
   /** A line from the app itself (for example from /loop), never sent to the model. */
   local?: boolean;
   ttftMs?: number;
@@ -353,14 +323,13 @@ export interface ChatMessage {
   requestId?: string;
   model?: string;
   inputTokens?: number;
-  /** What the context held after this reply (the last model request's prompt + reply); an agent turn's inputTokens add every request up. */
+  /** What the context held after this reply (the last model request's prompt + reply). */
   contextUsed?: number;
   /** When the first reasoning arrived, and how long the model reasoned before it began the answer (for "Thought for 38s"). */
   reasoningStartedAt?: number;
   reasoningMs?: number;
   contextMax?: number;
   usageSource?: 'reported' | 'demo' | 'unavailable' | 'estimated';
-  skillsUsed?: string[];
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -383,28 +352,6 @@ export interface ChatMessage {
 
 export type ToolState = 'proposed' | 'approved' | 'running' | 'done' | 'denied' | 'error';
 
-/**
- * A tool call the model is still writing (a whole file in one call, say), as the host streams it: the name, the file it is for, a growing size
- * and the tail of the text. It lives on the assistant message while the call is written and is removed when the call is complete (the
- * ordinary tool card takes over) or the reply was cut and the call was lost (`lost`).
- */
-export interface ToolDraft {
-  id: string;
-  name: string;
-  /** The file (or address) the call is for; empty until the model has written it. */
-  target: string;
-  /** Characters of the call's arguments so far (a file's size, a little more because of escapes). */
-  bytes: number;
-  /** Lines of text written so far. */
-  lines: number;
-  /** The last part of the text being written, read back from its JSON form (at most 1,600 characters). */
-  preview: string;
-  /** What the call is: 'write', 'edit', 'shell', ... (same as ToolCall.scope). */
-  scope?: 'read' | 'write' | 'shell' | 'connected';
-  /** The plain verb for the card while it is written ("Writing"). */
-  verb?: string;
-}
-
 export interface ToolCall {
   id: string;
   name: string;
@@ -416,15 +363,9 @@ export interface ToolCall {
   verb?: string;
   /** What the action is on: a file path, the command, a web address. */
   target?: string;
-  /** The question an approval card asks in plain words (server/agent/ask.mjs); the page translates it. */
-  ask?: { id: string; params?: (string | number)[]; why?: string; detail?: string };
   state: ToolState;
   result?: string;
   durationMs?: number;
-  /** Reported by the agent runtime: an approval answers a real request. Absent for design-build examples. */
-  live?: boolean;
-  /** The person approved this call. A finished card without it was never asked about. */
-  approved?: boolean;
 }
 
 /** A folder the model may read, and that sessions are grouped under. */
@@ -435,21 +376,6 @@ export interface Workspace {
   /** Earlier folders whose chats belong here (the first workspace moved off the app's own folder). */
   aliases?: string[];
 }
-
-export interface SessionAgent {
-  id: string;
-  name: string;
-  description: string;
-  status: 'working' | 'completed' | 'failed' | 'queued' | 'cancelled';
-  durationMs: number;
-  tokens: number;
-  /** Time the latest duration measurement was received. */
-  updatedAt?: number;
-  /** What the helper did, newest last (at most 20, short): a tool it used ({ verb, target }) or words it wrote ({ said }). Shown by View log (#5254). */
-  steps?: { verb?: string; target?: string; said?: string }[];
-}
-
-export type ChatMode = 'auto' | 'manual' | 'accept-edits' | 'plan' | 'bypass';
 
 /**
  * What the board needs to know about a /loop after the window closes: loops live in memory, so the chat keeps a small record of the
@@ -475,13 +401,10 @@ export interface Session {
   /** The person dismissed this chat's (or its loop's) card on the board at this time. A later problem brings it back. */
   ackedAt?: string;
   loop?: LoopRecord;
-  timeSkips?: import('./time-skip').TimeSkipRun[];
   showcase?: boolean;
-  agents?: SessionAgent[];
   previewOpen?: string;
   closedPreviews?: string[];
-  showcaseAgentStates?: boolean;
-  preferences?: { access?: 'read' | 'write' | 'full'; thinking?: string; thinkingBudget?: number; mode?: ChatMode; useTools?:boolean; /** false: plain conversation, no tools of any kind. */ agent?: boolean; /** This chat's API model; absent or null means the local model. */ remoteModel?: RemoteModelSelection | null };
+  preferences?: { thinking?: string; thinkingBudget?: number; };
   /** A branch does not have retained per-turn input usage. */
   statsAvailable?: boolean;
   id: string;
@@ -504,25 +427,6 @@ export interface Session {
   lastReadAt?: string;
 }
 
-export interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  source: 'bundled' | 'workspace' | 'user';
-  enabled: boolean;
-  triggers: string[];
-  /** The instruction text itself — what the model is actually told. Deciding
-   *  whether to trust a skill means reading this, not its name. */
-  body?: string;
-  /** When set, the skill applies only in this workspace. A skill written for
-   *  one project is noise in another, and on/off cannot express "here, not
-   *  there". */
-  onlyIn?: string | null;
-  /** How many times a prompt has actually triggered this skill, and when last. */
-  useCount?: number;
-  lastUsedAt?: string | null;
-  sizeKb: number;
-}
 
 export interface WorkspaceFile {
   path: string;

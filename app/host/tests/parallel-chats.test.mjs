@@ -9,7 +9,6 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DeliverableTracker, FolderClaims } from '../server/agent/deliverables.mjs';
 import { createChatStore } from '../server/chat-store.mjs';
 import { installFakeHostFetch } from './helpers/fake-host-chats.mjs';
 
@@ -22,79 +21,6 @@ function tool(dir, tracker, name, marker) {
   writeFileSync(join(dir, name), `marker:${marker}\n`);
   return tracker.check(name, { explicit: true });
 }
-
-test('two chats in one folder: each turn reports only the files its own tools wrote, interleaved, and a script file nobody can own is withheld', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-5008-'));
-  try {
-    const claims = new FolderClaims();
-    const A = new DeliverableTracker(dir, { claims, owner: 'chat-A' });
-    const B = new DeliverableTracker(dir, { claims, owner: 'chat-B' });
-    A.snapshot(); claims.begin(dir, 'chat-A');
-    B.snapshot(); claims.begin(dir, 'chat-B');
-    const reportedA = [], reportedB = [];
-    // alternate marked turns
-    reportedA.push(tool(dir, A, 'a-1.txt', 'A-one'));
-    reportedB.push(tool(dir, B, 'b-1.txt', 'B-one'));
-    reportedA.push(tool(dir, A, 'a-2.txt', 'A-two'));
-    reportedB.push(tool(dir, B, 'b-2.txt', 'B-two'));
-    mkdirSync(join(dir, 'out')); writeFileSync(join(dir, 'out', 'script-made.csv'), 'x,y\n1,2\n');   // a script's output, while both run
-    // A ends first: its sweep must not claim B's files
-    const sweptA = A.sweep(); claims.end(dir, 'chat-A');
-    const sweptB = B.sweep(); claims.end(dir, 'chat-B');
-    assert.deepEqual(reportedA.map(d => d.path), ['a-1.txt', 'a-2.txt']);
-    assert.deepEqual(reportedB.map(d => d.path), ['b-1.txt', 'b-2.txt']);
-    assert.deepEqual(sweptA.map(d => d.path), [], 'chat A is not given chat B\'s files, nor a file whose writer cannot be told');
-    assert.deepEqual(sweptB.map(d => d.path), [], 'and the other way round');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('a chat working alone still gets the files its scripts made (nothing changes without a second chat)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-5008b-'));
-  try {
-    const claims = new FolderClaims();
-    const A = new DeliverableTracker(dir, { claims, owner: 'chat-A' });
-    A.snapshot(); claims.begin(dir, 'chat-A');
-    writeFileSync(join(dir, 'built.js'), 'x\n');
-    assert.deepEqual(A.sweep().map(d => d.path), ['built.js']);
-    claims.end(dir, 'chat-A');
-    // a second chat that starts after the first has ended is not overlapped with it
-    const B = new DeliverableTracker(dir, { claims, owner: 'chat-B' });
-    B.snapshot(); claims.begin(dir, 'chat-B');
-    writeFileSync(join(dir, 'later.js'), 'y\n');
-    assert.deepEqual(B.sweep().map(d => d.path), ['later.js']);
-    claims.end(dir, 'chat-B');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('a chat that is stopped or fails still lets go of the folder, and another folder is never affected', () => {
-  const one = mkdtempSync(join(tmpdir(), 'strata-5008c-')), two = mkdtempSync(join(tmpdir(), 'strata-5008d-'));
-  try {
-    const claims = new FolderClaims();
-    const A = new DeliverableTracker(one, { claims, owner: 'chat-A' });
-    const B = new DeliverableTracker(two, { claims, owner: 'chat-B' });
-    A.snapshot(); claims.begin(one, 'chat-A');
-    B.snapshot(); claims.begin(two, 'chat-B');
-    writeFileSync(join(one, 'a.js'), 'x\n'); writeFileSync(join(two, 'b.js'), 'y\n');
-    assert.deepEqual(A.sweep().map(d => d.path), ['a.js'], 'different folders are not overlapped');
-    assert.deepEqual(B.sweep().map(d => d.path), ['b.js']);
-    claims.end(one, 'chat-A'); claims.end(one, 'chat-A');   // ending twice (stop, then error) is harmless
-    claims.end(two, 'chat-B');
-    assert.equal(claims.ownerOf(one, 'a.js'), null);
-    assert.equal(claims.overlapped(one, 'chat-A'), false);
-  } finally { rmSync(one, { recursive: true, force: true }); rmSync(two, { recursive: true, force: true }); }
-});
-
-test('a file both chats wrote with their file tools is reported to each chat that wrote it', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-5008e-'));
-  try {
-    const claims = new FolderClaims();
-    const A = new DeliverableTracker(dir, { claims, owner: 'chat-A' });
-    const B = new DeliverableTracker(dir, { claims, owner: 'chat-B' });
-    A.snapshot(); claims.begin(dir, 'chat-A'); B.snapshot(); claims.begin(dir, 'chat-B');
-    assert.equal(tool(dir, A, 'shared.md', 'A').status, 'created');
-    assert.ok(tool(dir, B, 'shared.md', 'B-longer-marker'), 'the second chat\'s own write is its own deliverable');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
 
 /* ---------------------------------------------------------------- app side: messages and tool cards of two live chats */
 
@@ -177,9 +103,9 @@ test('two live chats in one workspace keep their messages, tool cards and saved 
   for (const e of chatStore.list().chats) saved.push(JSON.parse(await chatStore.read(e.id)).session);
   assert.equal(saved.length, 2, JSON.stringify(fakeHost.calls.map((c) => `${c.method} ${c.path}`)));
   const bodyOf = (id) => JSON.stringify(saved.find((s) => s.id === id));
-  assert.ok(bodyOf(a.id).includes('MARK-A') && bodyOf(a.id).includes('A-unique-1') && bodyOf(a.id).includes('ends A'));
+  assert.ok(bodyOf(a.id).includes('MARK-A') && bodyOf(a.id).includes('ends A'));
   assert.ok(!/MARK-B|B-unique|ends B/.test(bodyOf(a.id)), 'chat A holds nothing of chat B');
-  assert.ok(bodyOf(b.id).includes('MARK-B') && bodyOf(b.id).includes('B-unique-1') && bodyOf(b.id).includes('ends B'));
+  assert.ok(bodyOf(b.id).includes('MARK-B') && bodyOf(b.id).includes('ends B'));
   assert.ok(!/MARK-A|A-unique|ends A/.test(bodyOf(b.id)), 'chat B holds nothing of chat A');
 
   // A second window saves a chat of its own, and then one of this window's chats; this window takes the first over and keeps its own.

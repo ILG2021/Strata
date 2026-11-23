@@ -39,46 +39,10 @@ test('the ui catalogs have the same keys and placeholders in all nine languages,
 });
 
 // ---------------------------------------------------------------------------------------------------------------- #4725
-test('#4725 the pending approvals of a chat are listed oldest first, and nothing else is', async () => {
-  const { pendingApprovals } = await load('lib/approvals.ts');
-  const tool = (id, state) => ({ id, name: 'write', state });
-  const session = { messages: [
-    { id: 'm1', tools: [tool('a', 'done'), tool('b', 'proposed')] },
-    { id: 'm2', tools: [tool('c', 'denied'), tool('d', 'running')] },
-    { id: 'm3' },
-    { id: 'm4', tools: [tool('e', 'proposed')] },
-  ] };
-  assert.deepEqual(pendingApprovals(session).map(x => [x.messageId, x.tool.id]), [['m1', 'b'], ['m4', 'e']]);
-  assert.deepEqual(pendingApprovals(null), []);
-  assert.deepEqual(pendingApprovals({ messages: [] }), []);
-});
-
-test('#4725 the Approve and Deny buttons live in the dock above the message box, and the reply only says that it waits', () => {
-  const chat = src('screens/Chat.tsx');
-  assert.match(chat, /<ApprovalDock sessionId=\{session\?\.id\}\/>/);
-  const toolCard = chat.slice(chat.indexOf('function ToolCard'));
-  assert.doesNotMatch(toolCard, /\{tr\("(Approve|Deny)"\)\}|resolveTool/,'the card in the reply no longer carries the buttons');
-  assert.match(toolCard, /Waiting for your answer below/);
-  const dock = src('components/ApprovalCard.tsx');
-  assert.match(dock, /resolveTool\(messageId, t\.id, true\)/);
-  assert.match(dock, /resolveTool\(messageId, t\.id, false\)/);
-  assert.equal((dock.match(/tr\("Approve"\)/g) ?? []).length, 2, 'one Approve and Deny pair per card style, nowhere else');
-});
-
-test('#4725 the dock and the waiting line are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
-  for (const l of languages.slice(1)) {
-    setTranslationLanguage(l);
-    for (const text of ['Waiting for your answer', 'Waiting for your answer below']) assert.notEqual(tr(text), text, `${l}: ${text}`);
-  }
-  setTranslationLanguage('en');
-});
-
 // ---------------------------------------------------------------------------------------------------------------------- #4748
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 const walk = dir => readdirSync(dir).flatMap(name => { const p = join(dir, name); return statSync(p).isDirectory() ? (name === 'locales' ? [] : walk(p)) : /\.tsx?$/.test(name) ? [p] : []; });
-
 test('#4748 every Copy control goes through one shared behaviour: no bare clipboard call, no copy icon button of its own', () => {
   const files = walk(new URL('../src', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
   const bare = [], own = [];
@@ -107,7 +71,7 @@ test('#4748 the shared copy shows its state on the control for about two seconds
 });
 
 test('#4748 Copied is translated in every language', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   for (const l of languages.slice(1)) { setTranslationLanguage(l); assert.notEqual(tr('Copied'), 'Copied', l); }
   setTranslationLanguage('en');
 });
@@ -171,7 +135,7 @@ test('#4721 only a website goes to the browser; a file keeps the side panel', as
   for (const [url, kind] of [['https://example.com/a.pdf', 'pdf'], ['https://example.com/a.png', 'image'], ['https://example.com/a.csv', 'table'], ['https://example.com/a.ts', 'code'], ['https://example.com/readme.md', 'markdown']]) assert.equal(artifactFromUrl(url).kind, kind, url);
   assert.equal(artifactFromUrl('javascript:alert(1)'), null);
   const chat = src('screens/Chat.tsx');
-  assert.match(chat, /if \(item\.kind === 'website'\) \{\s*void openExternal\(url\);\s*return;\s*\}\s*openPreview\(item\);/);
+  assert.match(chat, /if \(item\.kind === 'website' \|\| !localPreviewUrl\(url\)\) \{\s*void openExternal\(url\);\s*return;\s*\}\s*openPreview\(item\);/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------------- #4802
@@ -198,7 +162,7 @@ test('#4802 the elapsed time is counted from the job start and never goes below 
 });
 
 test('#4802 the progress card has no new sentence of its own: Stop and Stopping are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   for (const l of languages.slice(1)) {
     setTranslationLanguage(l);
     assert.notEqual(tr('Stop'), 'Stop', l);
@@ -219,7 +183,7 @@ test('#4798 while sharing is on, Serving shows the address on this computer and 
 });
 
 test('#4798 the three new Serving sentences are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   for (const l of languages.slice(1)) {
     setTranslationLanguage(l);
     for (const text of ['API base URL on this computer', 'Address for other devices', "Other devices use this address. It has its own port, separate from the one Strata's window uses, because only the model's API is shared on the network, not the app."]) assert.notEqual(tr(text), text, `${l}: ${text}`);
@@ -297,33 +261,9 @@ test('#3723 the new sentences are translated in every language', async () => {
 // ---------------------------------------------------------------------------------------------------------------------- #4749
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
-
-test('#4749 a message for a helper is checked before anything is sent, and an agent that is not running says so', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-helper-msg-'));
-  try {
-    const bridge = createAgentBridge({ dataDir: dir, localInstances: () => [], connections: () => [], env: process.env });
-    const code = async args => { try { await bridge.messageHelper(args); return 'sent'; } catch (e) { return e.code; } };
-    assert.equal(await code({ chatId: 'c', helperId: 'child-1', text: '   ' }), 'helper-empty');
-    assert.equal(await code({ chatId: 'c', helperId: '', text: 'hi' }), 'helper-unknown');
-    assert.equal(await code({ chatId: 'c', helperId: 'a b; rm -rf /', text: 'hi' }), 'helper-unknown');
-    assert.equal(await code({ chatId: 'c', helperId: 'child-1', text: 'use ISO dates' }), 'helper-idle', 'no running agent, no live parent');
-  } finally { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); }
-});
-
-test('#4749 the bridge uses the Harness own subagents/prompt with the documented request, steer for a working helper, queue for a finished one', () => {
-  const bridge = readFileSync(new URL('../server/agent/agent-bridge.mjs', import.meta.url), 'utf8');
-  assert.match(bridge, /rt\.gw\.rpc\('subagents\/prompt', \{ request: \{ requestId: `helper-\$\{randomUUID\(\)\}`, parentSessionId: parent, childSessionId: String\(helperId\), mode: 'continuable', delivery: delivery === 'steer' \? 'steer' : 'queue', content: \[\{ type: 'text', text: clean \}\] \} \}\)/);
-  const index = readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8');
-  assert.match(index, /path === '\/api\/chat\/helper' && method === 'POST'/);
-  const row = src('components/SubagentRow.tsx');
-  assert.match(row, /delivery: a\.status === 'working' \? 'steer' : 'queue'/);
-  assert.match(row, /sessionId && a\.status !== 'queued' && a\.status !== 'cancelled'/);
-  assert.match(src('components/ChatToolbar.tsx'), /sessionId=\{session && !session\.showcase \? session\.id : undefined\}/, 'the example chat has no real helpers to write to');
-});
 
 test('#4749 the helper strings are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   for (const l of languages.slice(1)) {
     setTranslationLanguage(l);
     for (const [text, values] of [['Message this helper'], ['Message to {0}', ['X']], ['Write to {0}…', ['X']], ['Sent to {0}.', ['X']]]) { const out = tr(text, values); assert.notEqual(out, text.replace('{0}', 'X'), `${l}: ${text}`); }
@@ -336,7 +276,7 @@ test('#4783 the three choices while an answer is written, as the web chat page h
   const { busyPlan, validWhileBusy, WHILE_BUSY } = await load('lib/while-busy.ts');
   assert.deepEqual([...WHILE_BUSY], ['wait', 'queue', 'interject']);
   assert.equal(busyPlan('wait'), 'refuse');
-  assert.equal(busyPlan('queue'), 'goal', 'a running goal has its own queue in the host; with none, the message is parked');
+  assert.equal(busyPlan('queue'), 'park', 'Send after: the message waits in the page and goes when the answer is done');
   assert.equal(busyPlan('interject'), 'interrupt');
   assert.equal(validWhileBusy('queue'), true);
   for (const bad of ['', 'steer', 'QUEUE', null, undefined, 3]) assert.equal(validWhileBusy(bad), false, String(bad));
@@ -345,7 +285,7 @@ test('#4783 the three choices while an answer is written, as the web chat page h
 test('#4783 the composer acts on the choice, the default keeps today\'s behaviour, and the parked message is sent when the chat is quiet', () => {
   const chat = src('screens/Chat.tsx');
   assert.match(chat, /if \(plan === 'interrupt'\) \{\s*updateDraft\(''\);\s*clearQuotes\(session\.id\);\s*parkMessage\(session\.id, out\);\s*stopStreaming\(\);\s*return;\s*\}/);
-  assert.match(chat, /if \(plan === 'goal'\) \{ clearQuotes\(session\.id\); parkMessage\(session\.id, out\); return; \}/);
+  assert.match(chat, /if \(plan === 'park'\) \{/);
   assert.match(chat, /pushToast\('info', tr\('The assistant is still answering'\)/, 'Wait still says so');
   assert.match(chat, /if \(!session \|\| !parkedReady\(session\.id, activeId, streaming, parked\?\.length \?\? 0\)\)\s*return;\s*const next = takeParked\(session\.id\);/);
   const store = src('lib/store.ts');
@@ -355,7 +295,7 @@ test('#4783 the composer acts on the choice, the default keeps today\'s behaviou
 });
 
 test('#4783 the new sentences are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   const lines = ['While an answer is being written', 'What Enter does when you send a message while the assistant is still answering.', 'Wait for the answer', 'Send after the answer', 'Interrupt the answer', 'Enter sends it when the answer is done.', 'Enter stops the answer here and sends it now.', 'Waiting to send', 'Take back'];
   for (const l of languages.slice(1)) { setTranslationLanguage(l); for (const text of lines) assert.notEqual(tr(text), text, `${l}: ${text}`); }
   setTranslationLanguage('en');
@@ -401,69 +341,12 @@ test('#4785 quoting is wired: the menu, the selection, the box above the compose
 });
 
 test('#4785 the new words are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
+  const { tr, setTranslationLanguage } = await withI18n('format.ts');
   const lines = ['Quote', 'Quoting the assistant', 'Quoting you', 'Remove this quote', 'Go to the quoted message', 'Quoted', 'Show or hide the rest of the quote'];
   for (const l of languages.slice(1)) { setTranslationLanguage(l); for (const text of lines) assert.notEqual(tr(text), text, `${l}: ${text}`); }
   setTranslationLanguage('en');
 });
 
-// ---------------------------------------------------------------------------------------------------------------------- #4244
-test('#4244 the question of the Harness is read into something the card can draw, and what cannot be shown is left out', async () => {
-  const { parseQuestions, buildAnswer } = await import(new URL('../server/agent/user-questions.mjs', import.meta.url));
-  const raw = [
-    { id: 'q1', question: ' Which colour? ', detail: 'Why', header: 'Colour', options: [{ label: 'Red', description: 'Warm' }, { label: '' }, { label: 'Blue' }] },
-    { id: '', question: 'no id' }, { id: 'q3', question: '' }, null, 'x',
-    { id: 'q2', question: 'Extras?', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] },
-  ];
-  const items = parseQuestions(raw);
-  assert.deepEqual(items.map(q => q.id), ['q1', 'q2']);
-  assert.deepEqual(items[0].options, [{ label: 'Red', description: 'Warm' }, { label: 'Blue', description: undefined }]);
-  assert.equal(items[0].question, 'Which colour?'); assert.equal(items[1].multiSelect, true); assert.equal(items[0].multiSelect, false);
-  assert.deepEqual(parseQuestions(undefined), []);
-  assert.equal(parseQuestions(Array.from({ length: 20 }, (_, i) => ({ id: `q${i}`, question: 'x' }))).length, 6);
-  // The answer is checked against what was asked, and has the shape of AskUserQuestionAnswer.
-  assert.deepEqual(buildAnswer(items, [{ id: 'q1', selected: ['Blue'] }, { id: 'q2', selected: ['A', 'B', 'A'] }]), { answers: [{ id: 'q1', selected: ['Blue'] }, { id: 'q2', selected: ['A', 'B'] }] });
-  assert.deepEqual(buildAnswer(items, [{ id: 'q1', selected: [], custom: ' my own ' }, { id: 'q2', selected: ['B'], custom: 'and more' }]), { answers: [{ id: 'q1', selected: [], custom: 'my own' }, { id: 'q2', selected: ['B'], custom: 'and more' }] });
-  assert.throws(() => buildAnswer(items, [{ id: 'q1', selected: ['Blue'] }]), /Answer every question/, 'one question left open');
-  assert.throws(() => buildAnswer(items, [{ id: 'q1', selected: ['Green'] }, { id: 'q2', selected: ['A'] }]), /Answer every question/, 'a label that was not offered is no answer');
-  assert.throws(() => buildAnswer(items, [{ id: 'q1', selected: ['Red', 'Blue'] }, { id: 'q2', selected: ['A'] }]), /one answer/, 'single-select takes one');
-});
-
-test('#4244 the page side: the card needs every question answered, and sends the offered labels and the own words', async () => {
-  const { readAsk, answerComplete, toAnswers } = await load('lib/agent-ask.ts');
-  const ask = readAsk({ callId: 'c1', questions: [{ id: 'q1', question: 'Colour?', options: [{ label: 'Red' }], multiSelect: false }, { id: 'q2', question: 'Extras?', options: [{ label: 'A' }], multiSelect: true }, { id: '', question: 'bad' }] });
-  assert.equal(ask.questions.length, 2);
-  assert.equal(readAsk({ callId: '', questions: [{ id: 'q', question: 'x' }] }), null);
-  assert.equal(readAsk({ callId: 'c', questions: [] }), null);
-  assert.equal(answerComplete(ask.questions, {}), false);
-  assert.equal(answerComplete(ask.questions, { q1: { selected: ['Red'], custom: '' } }), false);
-  assert.equal(answerComplete(ask.questions, { q1: { selected: [], custom: '  ' }, q2: { selected: ['A'], custom: '' } }), false);
-  assert.equal(answerComplete(ask.questions, { q1: { selected: [], custom: 'mine' }, q2: { selected: ['A'], custom: '' } }), true);
-  assert.deepEqual(toAnswers(ask.questions, { q1: { selected: [], custom: ' mine ' }, q2: { selected: ['A'], custom: '' } }), [{ id: 'q1', selected: [], custom: 'mine' }, { id: 'q2', selected: ['A'] }]);
-});
-
-test('#4244 the tool is offered again, as the group "Questions for you", and the bridge answers through the Harness result', () => {
-  const preset = readFileSync(new URL('../server/agent/preset.mjs', import.meta.url), 'utf8');
-  assert.match(preset, /export const REMOVED_PLUGIN_IDS = \['tool-schedule', 'planning'\];/);
-  assert.match(preset, /\{ id: 'tool-ask-user', name: '@deepseek-ai\/dsh-tool-ask-user' \}/);
-  const catalog = readFileSync(new URL('../server/agent/tools-catalog.mjs', import.meta.url), 'utf8');
-  assert.match(catalog, /id: 'questions'[^\n]*plugins: \['tool-ask-user'\]/);
-  const bridge = readFileSync(new URL('../server/agent/agent-bridge.mjs', import.meta.url), 'utf8');
-  assert.match(bridge, /await rt\.gw\.answerEvent\(\{ clientId: entry\.clientId \?\? rt\.clientId, eventId: entry\.eventId, outcome \}\);/);
-  assert.match(bridge, /if \(!turn \|\| turn\.finished \|\| turn\.stopping \|\| turn\.goalRun \|\| turn\.plan \|\| !turn\.announceQuestion \|\| !items\.length\) \{\s*void runtime\.gw\.answerEvent\(\{ clientId: runtime\.clientId, eventId: value\.eventId, outcome: 'next' \}\)/, 'a helper question, a stopping chat or an empty request is still declared unanswerable');
-  const gateway = readFileSync(new URL('../server/agent/gateway-client.mjs', import.meta.url), 'utf8');
-  assert.match(gateway, /const wire = outcome === 'next' \? \{ kind: 'next' \} : \{ kind: 'result', value: outcome \};/, 'a structured answer travels as the result value');
-  assert.match(src('components/ApprovalCard.tsx'), /asks\.map\(a => <QuestionCard key=\{a\.callId\} sessionId=\{sessionId!\} ask=\{a\}\/>\)/);
-});
-
-test('#4244 the new words are translated', async () => {
-  const { tr, setTranslationLanguage } = await withI18n('approvals.ts');
-  const lines = ['The assistant has a question for you', 'Type your own answer', 'Send answer', 'Skip', 'Questions for you', 'Lets the assistant stop and ask you a question, with answers to pick from, when it needs your decision.'];
-  for (const l of languages.slice(1)) { setTranslationLanguage(l); for (const text of lines) assert.notEqual(tr(text), text, `${l}: ${text}`); }
-  setTranslationLanguage('en');
-});
-
-// ---------------------------------------------------------------------------------------------------------------------- #3818
 test('#3818 the transcript lets go of the newest token while the reader has words selected in it, and offers the way back', () => {
   const chat = src('screens/Chat.tsx');
   assert.match(chat, /function readerHasSelection\(scroller: HTMLElement\): boolean \{\s*const sel = window\.getSelection\(\);\s*return !!sel && !sel\.isCollapsed && !!sel\.anchorNode && scroller\.contains\(sel\.anchorNode\) && sel\.toString\(\)\.trim\(\)\.length > 0;/);
@@ -471,8 +354,3 @@ test('#3818 the transcript lets go of the newest token while the reader has word
   assert.match(chat, /if \(pinned\.current && !sent && readerHasSelection\(el\)\) \{\s*pinned\.current = false;/, 'and the effect that follows each token; sending a message still brings the reader to it');
 });
 
-test('#4244 a goal, a plan step and a loop run without anyone there, so a question is declined at once instead of waiting', () => {
-  const bridge = readFileSync(new URL('../server/agent/agent-bridge.mjs', import.meta.url), 'utf8');
-  assert.match(bridge, /if \(!turn \|\| turn\.finished \|\| turn\.stopping \|\| turn\.goalRun \|\| turn\.plan \|\| !turn\.announceQuestion \|\| !items\.length\) \{\s*void runtime\.gw\.answerEvent\(\{ clientId: runtime\.clientId, eventId: value\.eventId, outcome: 'next' \}\)/);
-  assert.match(src('lib/store.ts'), /if \(ask && loopScheduler\.isRunning\(sessionId\)\) \{ void answerAgentAsk\(sessionId, ask\.callId, null\)\.catch\(\(\) => \{\}\); return; \}/);
-});

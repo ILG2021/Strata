@@ -28,7 +28,6 @@ const answers = {
   '/api/workspaces': { workspaces: [] },
   '/api/hardware': { gpus: [] },
   '/api/monitor': { cpu: 1 },
-  '/api/skills': [],
   '/api/model-providers': { providers: [] },
   '/api/image-models': { models: [] },
   '/api/runtime': { models: [] },
@@ -72,16 +71,16 @@ const snapshot = () => store.getState();
 
 test('an optional GET that never answers does not hold back live; the others still fill in', async () => {
   reset();
-  globalThis.__hang.add('/api/skills');
+  globalThis.__hang.add('/api/monitor');
   const t0 = Date.now();
   await store.bootstrap();
   assert.ok(Date.now() - t0 < 140, 'live before the time limit of the hung read');
   assert.equal(snapshot().connection, 'live');
   await new Promise(r => setTimeout(r, 50));
   assert.deepEqual(snapshot().hardware, answers['/api/hardware']);
-  assert.equal(globalThis.__calls['/api/skills'], 1, 'the hung read is still waiting for its first answer');
+  assert.equal(globalThis.__calls['/api/monitor'], 1, 'the hung read is still waiting for its first answer');
   await new Promise(r => setTimeout(r, 400));
-  assert.equal(globalThis.__calls['/api/skills'], 2, 'and is tried again, then given up');
+  assert.equal(globalThis.__calls['/api/monitor'], 2, 'and is tried again, then given up');
 });
 
 test('an essential GET that never answers ends offline within a bounded time', async () => {

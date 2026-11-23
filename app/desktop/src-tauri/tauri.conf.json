@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Strata",
-  "identifier": "ai.strata.desktop",
+  "productName": "Strata-fork",
+  "mainBinaryName": "strata-desktop",
+  "identifier": "ai.strata-fork.desktop",
   "build": {
     "frontendDist": "../../host/dist"
   },
@@ -28,14 +29,13 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Local AI, tuned to one model.",
-    "longDescription": "Strata runs one local model, tuned to your machine. Desktop and Terminal share the same model inventory, profiles, runtime and agent sessions.",
+    "longDescription": "Strata-fork (a privacy-focused fork of Strata: no cloud models, no agent, no tool servers) runs one local model, tuned to your machine. Desktop and Terminal share the same model inventory, profiles and runtime.",
     "resources": {
       "../../host/dist": "host/dist",
       "../../host/server": "host/server",
       "../../host/package.json": "host/package.json",
       "resources/node": "node",
       "resources/control": "control",
-      "resources/harness": "harness",
       "resources/engine-bundle": "engine-bundle"
     },
     "linux": {
@@ -64,7 +64,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2QjA5OTk5MDU1MjFGNUUKUldSZUgxSUZtWm13dHNGRU40N2xOUjdZZGpvcGl0NTB2WGxnS3VTc2RlakpSbnBxUkxndHNFY0oK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGRDQwMzlDOUUwMjcwOTYKUldTV2NBS2VuQVBVWHo1Zk94Z3ZaU1o4VVJrOU42YWFaamt1d281VDAwZnNGeVFVSWI3b3psc2wK",
       "endpoints": [
         "https://github.com/ILG2021/Strata/releases/latest/download/latest.json"
       ],

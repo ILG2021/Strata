@@ -7,14 +7,14 @@ const chat = readFileSync(new URL('../src/screens/Chat.tsx', import.meta.url), '
 const HINT = 'No model is loaded. Load one in Models to send this message.';
 const LANGS = ['en', 'zh', 'ja', 'de', 'es', 'ru', 'pt', 'ko', 'fr', 'he'];
 
-test('the hint shows only for typed text or a picture, no model, no running answer, and not for the command menu or /time-skip', () => {
+test('the hint shows only for typed text or a picture, no model, no running answer, and not for the command menu', () => {
   const line = chat.split('\n').find(l => l.includes(HINT)) ?? '';
-  assert.ok(line.includes("showNoModelHint({ streaming, canChat, hasText: !!draft.trim(), hasPhotos: photos.length > 0, bareSlash: draft.trim() === '/', isTimeSkip: timeSkipPrompt(draft) !== null })"), 'the shared condition (tests/remote-model-chip.test.mjs runs it)');
+  assert.ok(line.includes("showNoModelHint({ streaming, canChat, hasText: !!draft.trim(), hasPhotos: photos.length > 0, bareSlash: draft.trim() === '/' })"), 'the shared condition (tests/remote-model-chip.test.mjs runs it)');
   assert.ok(line.includes('role="status"'), 'announced politely');
 });
 
 test('the same condition greys Send (the hint explains exactly that state)', () => {
-  assert.ok(chat.includes('(!canChat && timeSkipPrompt(draft) === null)'));
+  assert.ok(chat.includes("draft.trim() === '/' || !canChat}"));
 });
 
 test('the hint exists in all ten languages with no raw slot', () => {

@@ -11,7 +11,6 @@ import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createNativeControl } from '../server/native-control.mjs';
 import { chooseParallel, applyParallel, withoutParallel, slotGb, DEFAULT_SLOTS, PARALLEL_POLICY, BATCH_MTP_POLICY, FALLBACK_NOTE } from '../server/native-parallel.mjs';
-import { buildProfile } from '../server/agent/profile.mjs';
 
 const hw = (gb, n = 1) => ({ gpus: Array.from({ length: n }, (_, i) => ({ index: i, vram_gb: gb })) });
 const cfg = (context, extra = {}) => ({ args: ['--max-context', String(context), '--mtp', '/m', '--spec', '4'], gpu: 0, ...extra });
@@ -78,13 +77,6 @@ test("a number the person chose is kept exactly: Expert mode's value, the saved 
 test('the retry configuration has no slots and no batch-mtp', () => {
   const next = withoutParallel({ ...cfg(32768), parallel: 4, args: [...cfg(32768).args, '--batch-mtp'] });
   assert.equal(next.parallel, undefined); assert.ok(!next.args.includes('--batch-mtp'));
-});
-
-test('helper agents: at least as many as the engine slots, and extra ones wait for their turn instead of being refused', () => {
-  const profile = slots => buildProfile({ local: [{ id: 'a', baseUrl: 'http://127.0.0.1:1/v1', modelId: 'm', slots }] });
-  const cap = slots => JSON.parse(profile(slots).patch.split('\n').slice(1).join('\n')).find(e => e.id === 'subagent').config.maxActiveSubagents;
-  assert.deepEqual([cap(1), cap(2), cap(4), cap(6)], [4, 4, 4, 6]);
-  assert.notEqual(profile(6).signature, profile(2).signature, 'a changed helper limit restarts the agent when idle');
 });
 
 // ---------------------------------------------------------------------------------------- the installed app's load

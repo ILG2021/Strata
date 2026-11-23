@@ -9,7 +9,7 @@
  *   3. a local model (unless --skip-local): Download and prepare with Read pictures ON, load, and a picture through the app's own chat.
  *
  *   node pics-e2e.mjs --install <node/ host/ control/> --components <engine components> --work <scratch> --image shapes.png \
- *   Also: --silent <url> (a server whose model list says nothing about pictures: ON by default), --agent (the same picture through the agent; needs a Harness)
+ *   Also: --silent <url> (a server whose model list says nothing about pictures: ON by default)
  *        --vlm http://127.0.0.1:18090/v1 --vlm-model smolvlm --text-only http://127.0.0.1:18091/v1 [--skip-local --family qwen --model IQ3_XXS --data <folder> --device cpu]
  */
 import { spawn } from 'node:child_process';
@@ -48,7 +48,7 @@ const QUESTION = 'Name each shape in this picture with its colour, and read out 
 /** One chat turn through the app's own endpoint: the plain-text answer, or the refusal (status + message). */
 async function chat(extra, message = QUESTION) {
   const response = await fetch(base + '/api/chat/stream', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message, agent: false, images: [{ url: png, name: 'shapes.png' }], ...extra }) });
+    body: JSON.stringify({ message, images: [{ url: png, name: 'shapes.png' }], ...extra }) });
   if (response.status !== 200) { const b = await response.json().catch(() => ({})); return { status: response.status, message: b.error ?? b.message ?? '' }; }
   let text = '', error = '';
   for (const line of (await response.text()).split('\n')) {
@@ -174,13 +174,6 @@ async function main() {
   const low = (local.text ?? '').toLowerCase();
   record('the local model answers about the picture (names the shapes)', local.status === 200 && /red|circle/.test(low) && /blue|square/.test(low) && /green|triangle/.test(low), `status=${local.status} err=${local.error ?? ''}`);
   record('the local model reads STRATA 42', low.includes('42'));
-  // the same picture through the agent (the Harness route must declare image input: the "does not declare image input" error of the tester)
-  if (args.agent) {   // needs a Harness beside the host (the installed layout has one; a bare test box does not)
-    const t1 = Date.now(); let a = { status: 0 };
-    for (let i = 0; i < 2 && !/red|circle|square|triangle/.test((a.text ?? '').toLowerCase()); i++) a = await chat({ nativeModelId: instance?.id, agent: true, sessionId: 'pics-agent-' + i, mode: 'plan', maxTokens: 4096 });
-    console.log(`    answer through the agent (${Math.round((Date.now() - t1) / 1000)} s): ${JSON.stringify((a.text ?? a.message ?? '').slice(0, 300))}`);
-    record('the agent route reads the picture too', a.status === 200 && /red|circle|square|triangle/.test((a.text ?? '').toLowerCase()) && !/does not declare image input/.test(a.text ?? ''), `status=${a.status} err=${a.error ?? ''}`);
-  }
   // OFF: loading with Read pictures off refuses a picture in plain words and says what to do
   await call(`/api/native/instances/${instance?.id}/unload`, 'POST', {});
   const loadOff = await call('/api/native/operations', 'POST', { kind: 'load', args: { model: model?.model ?? want, vision: 'no' } });

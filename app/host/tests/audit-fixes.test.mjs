@@ -32,10 +32,9 @@ test('fit distinguishes unified and dedicated budgets and only recommends a fast
  assert.equal(versionFit(versions[0],discrete).zone,'fast');
  assert.equal(versionFit(versions[1],discrete).zone,'slower');
 });
-test('live usage, configured context and empty time-skip telemetry remain honest',()=>{
+test('live usage and configured context remain honest',()=>{
  const s={id:'s',tokensIn:100,tokensOut:20,statsAvailable:true,messages:[{role:'assistant',streaming:true,usageSource:'estimated',tokens:8,inputTokens:100,contextMax:128000,tps:12}]};
  const m=chatMetrics(s,null,32768);assert.equal(m.max,32768);assert.equal(m.total,228);assert.equal(m.streaming,true);assert.equal(m.estimated,true);
- assert.equal(chatMetrics({...s,messages:[{role:'assistant',timeSkipId:'demo'}]},null).hasReplies,false);
  assert.equal(chatMetrics({...s,statsAvailable:false},null).total,null);
 });
 const {readConfig,jsonErrorOffset}=await moduleAt('../src/lib/config.ts');

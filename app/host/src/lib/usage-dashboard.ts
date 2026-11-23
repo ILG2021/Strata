@@ -16,7 +16,7 @@ export function usageDashboard(sessions: Session[], period: UsagePeriod, now = n
     if (session.showcase) continue;
     let active = false;
     for (const message of session.messages) {
-      if (message.role === 'system' || message.example || message.timeSkipId || message.streaming || !message.content.trim()) continue;
+      if (message.role === 'system' || message.example || message.streaming || !message.content.trim()) continue;
       const date = new Date(message.at), time = date.getTime();
       if (!Number.isFinite(time) || time < cutoff || time > now.getTime()) continue;
       active = true;

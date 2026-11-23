@@ -4,8 +4,8 @@ import type { NativeState } from './native';
  * Why a message cannot be sent right now, in plain words, or null when a model can answer. One answer for the composer's Send and for the
  * store, so a run never starts without a model. A model that is still downloading shows its progress instead of "none".
  */
-export function noModelNotice(native: NativeState | null, opts: { remote?: boolean; libraryLoaded?: boolean } = {}): { title: string; message: string } | null {
-  if (opts.remote || opts.libraryLoaded) return null;
+export function noModelNotice(native: NativeState | null, opts: { libraryLoaded?: boolean } = {}): { title: string; message: string } | null {
+  if (opts.libraryLoaded) return null;
   if (native?.instances.some(i => i.status === 'ready')) return null;
   const downloading = native?.jobs?.find(j => j.state === 'running' && (j.result?.install?.download || /install|prepare|download|pull|fetch/i.test(j.kind)));
   if (downloading) {

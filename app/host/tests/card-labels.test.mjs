@@ -1,4 +1,4 @@
-/** Chat card wording: no "Demo" labels, "Ran" for a tool nobody was asked about, "Approved" only when someone approved. */
+/** Chat card wording: no "Demo" labels, and a finished tool card says Done. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -25,13 +25,12 @@ test('the approval and result texts of a chat card exist in every language, tran
   }
 });
 
-test('the card shows "Ran" unless the person approved, and never "Demo approval"', () => {
+test('a finished card says Done, and never "Demo approval"', () => {
   const chat = readFileSync(resolve(root, 'src/screens/Chat.tsx'), 'utf8');
   assert.ok(!/Demo approval/i.test(chat));
-  assert.match(chat, /t\.live && t\.state === 'done' && t\.approved \? 'Approved' : 'Done'/);
+  assert.match(chat, /t\.state === 'error' \? 'Failed' : 'Done'/);
   const store = readFileSync(resolve(root, 'src/lib/store.ts'), 'utf8');
   assert.ok(!/Demo approval/i.test(store));
-  assert.match(store, /mode:state\.sessions\.find\(s=>s\.id===sessionId\)\?\.preferences\?\.mode\?\?'manual'/, 'the Mode menu choice travels with the turn');
 });
 
 test('every language has the same keys', () => {

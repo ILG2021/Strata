@@ -2,14 +2,10 @@ import {localeTag} from '../lib/i18n';
 import { tr } from '../lib/i18n';
 import { scopedMonitor, instanceLabel, deviceLabel } from '../lib/runtime-models';
 /** The original Strata dashboard, adapted to the current shell and device inventory. */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
-import { SnapshotDialog } from '../components/SnapshotDialog';
+import { useEffect, useState, type ReactNode } from 'react';
 import { requestSummary } from '../lib/monitor-summary';
-import { monitorPng } from '../lib/snapshot';
 import { Gauge, ReferenceSpark } from '../components/charts';
-import { Brand } from '../components/Brand';
-import { Bar, Btn, Icon, IconBtn, Select, type IconName } from '../components/ui';
+import { Bar, Btn, Icon, Select, type IconName } from '../components/ui';
 import { Screen } from '../components/layout';
 import { contextLabel, duration, tokens, tps } from '../lib/format';
 import { defaultGpuSet, gpuCapacity, gpuId, gpuMetric, gpuReported, gpuTotalShown, hasReading, shortGpuName } from '../lib/monitor-hardware';
@@ -17,7 +13,7 @@ import { useStore } from '../lib/store';
 import { api } from '../lib/client';
 import { useMoney } from '../lib/money';
 import { useKept } from '../lib/kept-state';
-import type { Hardware, MonitorState, ServeRequest } from '../lib/types';
+import type { ServeRequest } from '../lib/types';
 import { useNative, nativeRouting, type NativeState } from '../lib/native';
 import { nativeMonitorData, withHostSensors } from '../lib/native-monitor';
 const number = (value: number | null | undefined, digits = 0) => hasReading(value) ? value.toLocaleString(localeTag(), { maximumFractionDigits: digits, minimumFractionDigits: digits }) : '—';
@@ -85,38 +81,9 @@ function LegacyMonitorScreen({ native }: {
     const selectedInstance = runtime?.instances.find(i => i.id === instanceSelection) ?? (!multipleModels ? runtime?.instances[0] : undefined);
     const selection = selectedInstance?.id ?? 'all';
     const scoped = native ? live : scopedMonitor(live, runtime ?? null, selection, serving?.requests ?? []);
-    const scopeLabel = selectedInstance ? instanceLabel(selectedInstance) : `${runtime?.instances.length ?? 0} loaded models`;
     // null = the person has not chosen: a model with assigned cards shows those (#3211); a choice is kept while the app stays open.
     const [gpuSelection, setGpuSelection] = useKept<string | null>('monitor.gpu', null), [cpuSelection, setCpuSelection] = useState('all'), [showAll, setShowAll] = useState(false);
-    const [frozen, setFrozen] = useState<{
-        data: MonitorState;
-        hardware: Hardware | null;
-        time: string;
-        modelLabel: string;
-    } | null>(null);
-    const snapshotRef = useRef<HTMLDivElement>(null);
-    const [saving, setSaving] = useState(false), [saveError, setSaveError] = useState('');
-    const [snapshotOpen, setSnapshotOpen] = useState(false), [screenshot, setScreenshot] = useState('');
-    async function saveScreenshot() {
-        if (!live || !snapshotRef.current || saving)
-            return;
-        setSnapshotOpen(true);
-        setScreenshot('');
-        setSaving(true);
-        setSaveError('');
-        flushSync(() => setFrozen({ data: structuredClone(scoped ?? live), hardware: structuredClone(inventory), time: new Date().toLocaleString(localeTag()), modelLabel: scopeLabel }));
-        try {
-            setScreenshot(await monitorPng(snapshotRef.current));
-        }
-        catch (error) {
-            setSaveError(error instanceof Error ? error.message : 'Screenshot could not be saved.');
-        }
-        finally {
-            setFrozen(null);
-            setSaving(false);
-        }
-    }
-    const data = frozen?.data ?? scoped, hardware = frozen?.hardware ?? inventory;
+    const data = scoped, hardware = inventory;
     if (!data)
         return <Screen title={tr("Monitor")}><p className="muted">{tr("Waiting for engine telemetry\u2026")}</p></Screen>;
     // A display adapter that has no sensors and no memory of its own (an integrated one) cannot be measured; counting it would blank every total.
@@ -181,8 +148,7 @@ function LegacyMonitorScreen({ native }: {
     const outputSpeed = data.totals.decodeMs ? data.totals.tokensOut / (data.totals.decodeMs / 1000) : null;
     const multipleScope = selection === 'all' && (runtime?.instances.length ?? 0) > 1;
     const chooseInstance = (id: string) => { setInstanceSelection(id); setGpuSelection(null); };
-    const overview = <div className="stack stack--lg monitor-capture monitor-dashboard" ref={snapshotRef}>
-    {tr(frozen ? <header className="section-toolbar"><div><div className="snapshot__brand-title"><Brand variant="lockup" height={24} decorative/></div><p className="small muted">{tr(frozen.modelLabel)} · {tr(frozen.time)}</p></div></header> : null)}
+    const overview = <div className="stack stack--lg monitor-capture monitor-dashboard">
     {tr(multipleModels ? <section className="st-card"><h2 className="h4">{tr("Model performance")}</h2><div className="st-tablewrap"><table className="st-table native-performance-table"><thead><tr><th>{tr("Model / device")}</th><th>{tr("Generating tok/s")}</th><th>{tr("Reading tok/s")}</th><th>{tr("State")}</th><th>{tr("Active / queued")}</th></tr></thead><tbody>{tr(runtime?.instances.map(i => { const recent = (data.requests ?? []).find(r => r.instanceId === i.id); const writing = i.phase === 'generating' || i.phase === 'thinking', reading = i.phase === 'reading'; return <tr key={i.id}><td><button className="text-btn strong" onClick={() => chooseInstance(i.id)}>{tr(instanceLabel(i))}</button><small>{tr(deviceLabel(i.gpuIds, inventory))}</small></td><td>{tr(number(writing ? i.outputTps : recent?.tps, 1))}<small>{tr(writing ? 'Now' : recent ? 'Last request' : 'No request yet')}</small></td><td>{tr(number(reading ? i.promptTps : recent?.promptTps, 0))}<small>{tr(reading ? 'Now' : recent ? 'Last request' : 'No request yet')}</small></td><td>{tr(i.phase)}{tr(runtime.mode === 'simulated' ? <small>{tr("Illustrative")}</small> : null)}</td><td>{tr(number(i.active))} / {tr(number(i.queued))}</td></tr>; }))}</tbody></table></div></section> : null)}
     {tr(multipleModels ? <p className="xs muted monitor-scope-note">{tr(selectedInstance ? selectedInstance.gpuIds.length ? 'Requests, context and speed are scoped to this model. GPU readings include all work on the selected devices.' : 'CPU-only model. Requests and context are scoped to this model; system metrics are shared host measurements.' : 'Select a model for its context and speed. GPU readings and system RAM are shared host measurements.')}</p> : null)}
     <section className="st-card monitor-state" aria-label={tr("Model state")} data-snapshot-skip>
@@ -220,7 +186,6 @@ function LegacyMonitorScreen({ native }: {
       <dl className="monitor-cache-facts"><div><dt>{tr("Last request")}</dt><dd>{tr(lastCacheText)}</dd></div><div><dt>{tr("Reused since start")}</dt><dd>{tr(hasReading(reusedTotal) ? `${tokens(data.totals.cachedTokens)} tokens` : '—')}</dd></div>{tr(cache?.enabled ? <><div><dt>{tr("Parked / restored")}</dt><dd>{tr(number(cache.parks))} / {tr(number(cache.restores))}{tr(cache.evictions ? ` · ${number(cache.evictions)} evicted` : '')}</dd></div>{tr(cache.lastEvent ? <div><dt>{tr("Last switch")}</dt><dd>{tr(cache.lastEvent === 'parked' ? 'Parked' : 'Restored')} {tr(tokens(cache.lastTokens))}{tr(" tokens")}{tr(cache.lastAt ? ` · ${new Date(cache.lastAt * 1000).toLocaleTimeString(localeTag())}` : '')}</dd></div> : null)}</> : null)}</dl>
       <p className="small muted">{tr(cache?.enabled ? 'Parked conversations resume from their saved state. The oldest is removed when the cache fills.' : lastReused ? 'Follow-up requests can reuse the previous prompt’s cached tokens.' : 'Cache details appear when the engine reports prompt reuse.')}</p>
     </section>
-    {tr(data.mcp?.servers.length ? <section className="st-card monitor-mcp"><div className="section-toolbar"><h2 className="h4">{tr("MCP servers")}</h2><span className="small muted">{tr("{0} tools · {1} of {2} servers connected", [number(data.mcp.tools),number(data.mcp.servers.filter(server => ['ready','stopped'].includes(server.state)).length),number(data.mcp.servers.length)])}</span></div>{tr(data.mcp.servers.map(server => <div key={server.name}><div className="row row--between"><strong>{server.name}</strong><span className="small muted">{tr({ ready: 'Connected', starting: 'Starting', failed: 'Failed', stopped: 'Stopped', idle: 'Waiting' }[server.state] ?? server.state)}</span></div><p className="xs muted">{server.transport}{tr(server.transport ? ' · ' : '')}{tr(server.tools.length)}{tr(" tools")}{tr(server.info?.name ? ` · ${server.info.name}${server.info.version ? ` ${server.info.version}` : ''}` : '')}</p>{tr(server.error ? <p className="small inline-error">{tr(server.error)}</p> : null)}<div className="monitor-mcp-tools">{tr(server.tools.map(tool => <span key={tool.name} title={tr(tool.description)} className="st-badge">{tool.name}</span>))}</div></div>))}</section> : null)}
   </div>;
-    return <Screen width="wide" plainHeader title={tr("Monitor")} titleDetail={multipleModels ? <Select ariaLabel={tr("Monitor model")} value={selection} options={[{ value: 'all', label: `All models (${runtime?.instances.length ?? 0})` }, ...(runtime?.instances ?? []).map(i => ({ value: i.id, label: `${instanceLabel(i)} · ${deviceLabel(i.gpuIds, inventory)}` }))]} onChange={chooseInstance}/> : selectedInstance ? instanceLabel(selectedInstance) : 'No model loaded'} actions={<IconBtn name="image" title={tr(saving ? 'Preparing screenshot…' : 'Save Monitor screenshot')} disabled={saving} onClick={() => void saveScreenshot()}/>}>{tr(saveError ? <p className="inline-error" role="alert">{tr(saveError)}</p> : null)}{tr(overview)}<SnapshotDialog open={snapshotOpen} data={screenshot} pending={saving} error={saveError} onClose={() => setSnapshotOpen(false)} onRetry={() => void saveScreenshot()}/></Screen>;
+    return <Screen width="wide" plainHeader title={tr("Monitor")} titleDetail={multipleModels ? <Select ariaLabel={tr("Monitor model")} value={selection} options={[{ value: 'all', label: `All models (${runtime?.instances.length ?? 0})` }, ...(runtime?.instances ?? []).map(i => ({ value: i.id, label: `${instanceLabel(i)} · ${deviceLabel(i.gpuIds, inventory)}` }))]} onChange={chooseInstance}/> : selectedInstance ? instanceLabel(selectedInstance) : 'No model loaded'}>{tr(overview)}</Screen>;
 }

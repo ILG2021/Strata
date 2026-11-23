@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { withPlainStatus } from '../server/agent/status.mjs';
+import { withPlainStatus } from '../server/plain-status.mjs';
 
 const built = await build({ stdin: { contents: "export * from './src/lib/live-status'; export { setTranslationLanguage, loadCatalog } from './src/lib/i18n';", resolveDir: process.cwd() }, bundle: true, write: false, format: 'esm', platform: 'node', loader: { '.json': 'json' } });
 const L = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);

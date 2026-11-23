@@ -2,7 +2,6 @@ import {sessionTitle} from '../lib/session-title';
 import { tr } from '../lib/i18n';
 import { useNative } from '../lib/native';
 import { modelFamilyIcon } from '../lib/model-icons';
-import { chosenRemote } from '../lib/composer-model';
 import { TaskTree } from './TaskTree';
 /** Quiet navigation, with the same destinations at every window size. */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
@@ -70,16 +69,14 @@ export function Sidebar({ containerRef }: {
     const current = library?.variants.find(v => v.id === library.loaded);
     const native = useNative(), nativeCurrent = native?.instances.find(i => i.id === native.defaultId);
     // A model picked from an API connection (chat header) is a model to chat with: the chip names it and its connection while no local model is loaded.
-    const remoteChoice = useStore(s => s.remoteModel), remoteProviders = useStore(s => s.providers);
-    const remoteChosen = !current && !nativeCurrent ? chosenRemote(remoteProviders, remoteChoice) : null;
     const nativeFamily = nativeCurrent ? native?.catalog?.families.find(f => f.sizes.some(s => s.id === nativeCurrent.model)) : undefined;
-    const modelName = nativeFamily?.title ?? nativeCurrent?.label ?? (current?.local ? current.name : current?.family) ?? remoteChosen?.model.name ?? tr('No model loaded');
+    const modelName = nativeFamily?.title ?? nativeCurrent?.label ?? (current?.local ? current.name : current?.family) ?? tr('No model loaded');
     // The version from the catalog and the card it runs on ("Q2_0 · GPU 2"), not the file id.
     const nativeSize = nativeCurrent ? nativeFamily?.sizes.find(s => s.id === nativeCurrent.model) : undefined;
     const nativeSecond = nativeCurrent ? [nativeSize?.model ?? nativeCurrent.model.toUpperCase(), nativeCurrent.gpus.length ? nativeCurrent.gpus.map(g => `GPU ${g + 1}`).join(' + ') : ''].filter(Boolean).join(' · ') : null;
-    const modelQuant = nativeSecond ?? current?.quant ?? remoteChosen?.connection.name ?? tr('View model versions');
+    const modelQuant = nativeSecond ?? current?.quant ?? tr('View model versions');
     const phase = nativeCurrent ? (nativeCurrent.status === 'ready' ? nativeCurrent.phase : nativeCurrent.status) : monitor?.phase ?? 'idle';
-    const status = phase === 'unavailable' ? 'Status unavailable' : phase === 'error' ? 'Error' : phase === 'loading' ? 'Loading' : !current && !nativeCurrent && !remoteChosen ? 'No model loaded' : phase === 'reading' ? 'Reading prompt' : phase === 'thinking' ? 'Thinking' : phase === 'generating' ? 'Generating' : 'Ready';
+    const status = phase === 'unavailable' ? 'Status unavailable' : phase === 'error' ? 'Error' : phase === 'loading' ? 'Loading' : !current && !nativeCurrent ? 'No model loaded' : phase === 'reading' ? 'Reading prompt' : phase === 'thinking' ? 'Thinking' : phase === 'generating' ? 'Generating' : 'Ready';
     // The model is busy with a chat that is not the one in front of the person: the chip says which one (a title, or how many).
     const awayChats = [...working].filter(id => !(location.route === 'chat' && id === activeSession));
     const awayTitle = awayChats.length === 1 ? sessions.find(s => s.id === awayChats[0]) : undefined;
@@ -133,7 +130,6 @@ export function Sidebar({ containerRef }: {
       </div>
       <div className="nav__foot">
         <button className="enginechip" data-state={status === 'Ready' ? 'ready' : ['Reading prompt', 'Thinking', 'Generating', 'Loading'].includes(status) ? 'busy' : 'off'} onClick={() => go('models')} title={tr("{0} \u00B7 {1} \u00B7 {2}", [modelName, workingLine ?? modelQuant, tr(status)])} aria-label={tr("{0} \u00B7 {1}", [modelName, modelQuant])}><span className="enginechip__family"><Icon name={modelFamilyIcon(current?.family)} size={20}/><span className="enginechip__dot"/></span><span className="enginechip__text nav__rail-hide"><span className="enginechip__title">{modelName}</span><span className="enginechip__sub">{workingLine ?? modelQuant}</span></span></button>
-        <NavLink route="skills" label={tr("Skills")} icon="skills" current={location.route}/>
         <NavLink route="monitor" label={tr("Monitor")} icon="activity" current={location.route}/>
         <NavLink route="models" label={tr("Models")} icon="models" current={location.route === 'tuning' ? 'models' : location.route}/>
         <div className="nav__bottom"><MoreMenu current={location.route}/><button className="st-btn st-btn--icon theme-switch" aria-label={tr(dark ? 'Switch to light mode' : 'Switch to dark mode')} title={tr(dark ? 'Switch to light mode' : 'Switch to dark mode')} onClick={() => setTheme(dark ? 'light' : 'dark')}><span key={String(dark)} className="theme-switch__icon"><Icon name={dark ? 'sun' : 'moon'} size={19}/></span></button></div>

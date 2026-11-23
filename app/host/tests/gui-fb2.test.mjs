@@ -12,7 +12,6 @@ async function bundle(file) {
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
 }
 globalThis.window ??= globalThis; globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
-const { COMPACT_FILES_FROM, deliveryFolder, dirOf, rootOf } = await bundle('deliverables.ts');
 const LANGS = ['en', 'zh', 'ja', 'de', 'es', 'ru', 'pt', 'ko', 'fr', 'he'];
 
 test('1: Read pictures is a plain checkmark: no explanation, no download button; Load does the rest', () => {
@@ -104,44 +103,6 @@ test('7: the chat\'s time and token count have no fixed widths', () => {
   assert.match(css, /\.live-status__verb \{ flex: 0 1 24ch; min-width: 0;/, 'the word is the one that gives way');
 });
 
-const f = (path, extra = {}) => ({ path, abs: `/w/${path}`, name: path.split('/').at(-1), kind: 'code', status: 'created', size: 10, lines: 3, added: 3, removed: 0, ...extra });
-
-test('8: where a run delivered to, from its files', () => {
-  assert.equal(dirOf('site/css/a.css'), 'site/css');
-  assert.equal(dirOf('a.css'), '');
-  assert.equal(dirOf('site\\css\\a.css'), 'site/css');
-  assert.equal(rootOf({ abs: '/w/pagoda/site/a.css', path: 'site/a.css' }), '/w/pagoda');
-  assert.equal(rootOf({ abs: 'C:\\w\\pagoda\\site\\a.css', path: 'site/a.css' }), 'C:/w/pagoda');
-  assert.equal(rootOf(undefined), '');
-  // the file the answer names decides
-  const files = [f('site/index.html', { kind: 'html', order: 1 }), f('site/a.css', { order: 2 }), f('notes/readme.md', { kind: 'markdown', order: 3 })];
-  assert.equal(deliveryFolder(files, 'Open site/index.html'), 'site');
-  assert.equal(deliveryFolder(files, 'See notes/readme.md'), 'notes');
-  // nothing previewable: the top-level folder with the most files
-  const code = [f('src/a.ts', { order: 1 }), f('src/b.ts', { order: 2 }), f('src/c.ts', { order: 3 }), f('docs/x.ts', { order: 4 })];
-  assert.equal(deliveryFolder(code, ''), 'src');
-  assert.equal(deliveryFolder([f('x.ts', { order: 1 })], ''), '', 'a file in the chat folder itself: the chat folder');
-  assert.equal(deliveryFolder([], ''), '');
-  assert.equal(deliveryFolder(undefined, ''), '');
-  // 379 files
-  const many = [f('site/index.html', { kind: 'html', order: 379 }), ...Array.from({ length: 378 }, (_, i) => f(`site/assets/p${i}.js`, { order: i + 1 }))];
-  assert.equal(deliveryFolder(many, 'I stopped here.'), 'site');
-});
-
-test('8: a few files keep their cards; many are one compact block with an accessible, keyboard-usable count', () => {
-  assert.equal(COMPACT_FILES_FROM, 6);
-  const chat = src('src/screens/Chat.tsx'), parts = src('src/components/Deliverables.tsx'), css = src('src/styles/liquid.css');
-  assert.match(chat, /m\.deliverables\.length >= COMPACT_FILES_FROM \? <FilesSummary files=\{m\.deliverables\}/);
-  assert.match(chat, /<FileCard key=\{f\.path\}/, 'a short list is unchanged');
-  const block = parts.slice(parts.indexOf('export function FilesSummary'), parts.indexOf('The saved skills an answer used'));
-  assert.match(block, /<button type="button" className="fsum__toggle" aria-expanded=\{open\} aria-controls=\{id\}/, 'a real button: Enter and Space work, the state is announced');
-  assert.match(block, /className="fsum__open" aria-label=\{tr\("Open \{0\}", \[p\.name\]\)\}/, 'each folder button says which folder');
-  assert.match(block, /\{open \? <ul className="fsum__list" id=\{id\}>/, 'the list is closed until asked');
-  assert.match(block, /<button type="button" className="fsum__file"/, 'every row is a button');
-  assert.match(css, /\.fsum__list \{[^}]*max-height: min\(320px, 50vh\);[^}]*overflow: auto;/, 'long lists scroll inside the block');
-  assert.match(css, /\.fsum__toggle:focus-visible/);
-  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.fsum__chev/);
-});
 
 test('"Leave room for my work" everywhere the old name was, and the new words in nine languages', () => {
   for (const file of ['src/components/NativeModels.tsx', 'src/components/GuidedSetup.tsx', 'src/lib/plain-errors.ts']) assert.ok(!src(file).includes('Leave 20%'), file);

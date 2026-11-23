@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/client';
 import { useImeKeys } from '../lib/ime-keys';
 import { tr } from '../lib/i18n';
-import { askNotificationPermission, playDoneSound } from '../lib/attention';
-import { setApprovalNotify, setDoneSound, setNumberQuotes, useStore } from '../lib/store';
+import { playDoneSound } from '../lib/attention';
+import { setDoneSound, setNumberQuotes, useStore } from '../lib/store';
 import { Btn } from './ui';
 
 /** What the host says about the desktop shell (GET /api/shell): null in a browser or while it loads. */
@@ -40,12 +40,6 @@ export function DoneSoundSetting() {
     </span>;
 }
 
-/** A desktop notification when Manual mode waits for an approval (#3477). */
-export function ApprovalNotifySetting() {
-    const on = useStore(s => s.approvalNotify);
-    return <button className="st-toggle" role="switch" aria-checked={on} aria-label={tr("Notify me when Strata needs an answer")}
-        onClick={() => { if (!on) void askNotificationPermission(); setApprovalNotify(!on); }}/>;
-}
 
 /** Settings > General > Number quotes (#5993): off by default; on, a message that quotes several passages numbers them. */
 export function NumberQuotesSetting() {

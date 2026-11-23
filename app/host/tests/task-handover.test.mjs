@@ -2,8 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { createAgentTaskRunner } from '../server/agent/task-run.mjs';
-import { createTaskService } from '../server/tasks.mjs';
 
 const compiled = await build({ stdin: { contents: "export * from './src/lib/task-handover'; export * from './src/lib/i18n';", resolveDir: process.cwd() }, bundle: true, write: false, format: 'esm', platform: 'node', loader: { '.json': 'json' } });
 const { splitTaskOutput, taskHandoverMessage, taskHandoverTitle, setTranslationLanguage, loadCatalog } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
@@ -43,20 +41,6 @@ test('the labels follow the language of the app', () => {
   const text = taskHandoverMessage(task);
   assert.match(text, /Weiter mit der Aufgabe „Hardware check“/); assert.match(text, /\*\*Was sie gefunden hat\*\*/); assert.match(text, /Dateien/);
   setTranslationLanguage('en');
-});
-
-test('a scheduled run keeps the files the agent made, and a later failed run does not keep the old ones', async () => {
-  const frames = [{ type: 'delta', text: 'Done.' }, { type: 'deliverable', abs: '/w/report.md', name: 'report.md', path: 'report.md' }, { type: 'deliverable', abs: '/w/report.md', name: 'report.md', path: 'report.md' }];
-  const agent = { runTurn: async ({ onFrame }) => { for (const f of frames) onFrame(f); }, stop: async () => {}, forget() {}, approve: async () => {} };
-  const run = createAgentTaskRunner({ agent, choice: () => ({ instanceId: 'i' }), workspace: '/w' });
-  let store = [];
-  const service = createTaskService({ read: () => store, write: v => { store = v; }, run });
-  const saved = service.put({ title: 'T', prompt: 'p', frequency: 'daily', at: '08:00', timeZone: 'UTC' });
-  await service.execute(saved.id);
-  assert.deepEqual(service.list()[0].files, [{ name: 'report.md', path: '/w/report.md' }]);
-  frames.length = 0; frames.push({ type: 'error', message: 'boom' });
-  await service.execute(saved.id);
-  assert.equal(service.list()[0].status, 'error'); assert.deepEqual(service.list()[0].files, []);
 });
 
 test('a long run keeps the first steps, shortened, and says how many more', () => {

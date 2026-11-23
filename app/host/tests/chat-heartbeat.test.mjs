@@ -3,8 +3,6 @@
  * an approval wait) a `{"type":"beat"}` frame goes out every 15 seconds so the web view does not drop the request at 60 s.
  *  - the helper, with fake timers: a 60-second tool wait gives the beats, and the timer ends on finish, on close, on error and
  *    on stop(), with no interval left behind;
- *  - the real route, against a real host and a scripted API model that goes silent: beats arrive, a client that goes away
- *    cancels the model request before the next beat, the next message works, and two chats stay independent.
  * The frontend consumer (src/lib/store.ts) has no branch for an unknown frame type, so `beat` changes nothing there; the last
  * test pins that.
  */
@@ -92,127 +90,6 @@ test('two responses beat independently: ending one leaves the other beating', t 
   t.mock.timers.tick(30_000);
   assert.equal(beats(one), 2, 'the closed chat stops');
   assert.equal(beats(two), 4, 'the other keeps going');
-});
-
-/* ---------------------------------------------------------------- the real route --- */
-
-const HOST = resolve(import.meta.dirname, '..', 'server', 'index.mjs');
-const freePort = () => new Promise(r => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } };
-
-async function setup(t, beatMs) {
-  const worker = await startScriptedWorker({ model: 'cloud-model' });
-  const home = mkdtempSync(join(tmpdir(), 'strata-beat-'));
-  const ws = join(home, 'workspace'); mkdirSync(ws, { recursive: true });
-  const port = await freePort();
-  const env = {
-    ...process.env, STRATA_HOME: home, STRATA_PORT: String(port), STRATA_WORKSPACE: ws, STRATA_REAL_ENGINE: '0',
-    STRATA_COMPONENTS_DIR: join(home, 'components'), STRATA_STREAM_BEAT_MS: String(beatMs),
-    STRATA_SETTINGS_FILE: join(home, 'app-settings.json'), LOCALAPPDATA: join(home, 'Local'), APPDATA: join(home, 'Roaming'),
-    XDG_DATA_HOME: join(home, 'xdg-data'), XDG_STATE_HOME: join(home, 'xdg-state'), XDG_CONFIG_HOME: join(home, 'xdg-config'),
-    STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()),
-  };
-  delete env.STRATA_HARNESS_DIR;
-  const child = spawn(process.execPath, [HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  let log = '';
-  child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
-  t.after(async () => {
-    if (child.exitCode === null) {
-      if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
-      else child.kill('SIGTERM');
-      await new Promise(r => child.once('exit', r));
-    }
-    await worker.close(); cleanup(home);
-  });
-  const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(`${base}/api/health`)).ok) break; } catch { /* not up yet */ }
-    if (child.exitCode !== null) throw new Error(`the host exited: ${log.slice(-500)}`);
-    await sleep(100);
-  }
-  const saved = await fetch(`${base}/api/model-providers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'custom', name: 'Scripted API', baseUrl: worker.url, protocol: 'openai-chat', apiKey: 'sk-host-test-0123456789', models: [{ id: 'cloud-model', name: 'Cloud model', contextMax: 64000 }] }) });
-  assert.equal(saved.status, 200);
-  const connectionId = (await saved.json()).connections[0].id;
-  const remoteModel = { connectionId, modelId: 'cloud-model' };
-  /** Open a chat stream; frames are handed to onFrame as they arrive; abort() drops the connection like a client that left. */
-  const chat = (sessionId, message, onFrame = () => {}) => {
-    const controller = new AbortController();
-    const frames = [];
-    const done = (async () => {
-      const res = await fetch(`${base}/api/chat/stream`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ sessionId, message, remoteModel, history: [], agent: false }) });
-      assert.equal(res.status, 200);
-      let buffer = '';
-      const decoder = new TextDecoder();
-      for await (const chunk of res.body) {
-        buffer += decoder.decode(chunk, { stream: true });
-        let i;
-        while ((i = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, i).trim(); buffer = buffer.slice(i + 1); if (line) { const f = JSON.parse(line); frames.push(f); onFrame(f); } }
-      }
-      return frames;
-    })();
-    return { frames, done, abort: () => controller.abort() };
-  };
-  return { worker, chat, alive: () => child.exitCode === null, log: () => log };
-}
-// A wait for an event, not a deadline: on a loaded Windows PC the host, the scripted model and the test share the CPU with whatever else runs, and a window of 1.5 s or 8 s
-// failed now and then (0.2.16 INT runs). The limit only ends a test that would otherwise hang; the test's own timeout is longer.
-const until = async (fn, ms = 30_000) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await sleep(25); } return false; };
-
-test('route: a silent API model gets beats; a client that leaves cancels the model request', { timeout: 90_000 }, async t => {
-  const s = await setup(t, 300);
-  const quiet = s.chat('chat-beat-a', 'SCRIPT:hang');
-  assert.ok(await until(() => quiet.frames.filter(f => f.type === 'beat').length >= 2), 'two beats while the model says nothing');
-  const framesBefore = quiet.frames.length;
-  quiet.abort();
-  await assert.rejects(quiet.done, { name: 'AbortError' });
-  assert.ok(await until(() => s.worker.aborted >= 1), 'disconnect cancelled the direct model request');
-  assert.ok(framesBefore >= 2);
-  const next = s.chat('chat-beat-a', 'SCRIPT:echo still works');
-  const frames = await next.done;
-  assert.equal(frames.filter(f => f.type === 'delta').map(f => f.text).join(''), 'still works');
-  assert.equal(frames.at(-1).type, 'done');
-  assert.ok(s.alive(), 'the host is alive');
-});
-
-test('route: a client that leaves cancels the model request at once, not when the next beat finds the connection closed', { timeout: 90_000 }, async t => {
-  // The beat is 20 s here and the wait below is shorter than that: no beat can reach the closed connection while the test waits, so a cancel can only come from the
-  // connection's own close. (The version of this check that raced a 300 ms beat against a 1.5 s window failed on a loaded PC; this one has no clock in it.)
-  const s = await setup(t, 20_000);
-  const quiet = s.chat('chat-beat-close', 'SCRIPT:hang');
-  assert.ok(await until(() => s.worker.requests.length >= 1), 'the model request is under way');
-  quiet.abort();
-  await assert.rejects(quiet.done, { name: 'AbortError' });
-  assert.ok(await until(() => s.worker.aborted >= 1, 15_000), 'the disconnect cancelled the model request, with no beat involved');
-  assert.equal(quiet.frames.filter(f => f.type === 'beat').length, 0, 'no beat had been sent: the cancel did not wait for one');
-});
-
-test('route: two chats at once are independent; leaving one does not touch the other', { timeout: 90_000 }, async t => {
-  const s = await setup(t, 250);
-  const a = s.chat('chat-beat-1', 'SCRIPT:hang');
-  const b = s.chat('chat-beat-2', 'SCRIPT:hang');
-  const count = c => c.frames.filter(f => f.type === 'beat').length;
-  assert.ok(await until(() => count(a) >= 2 && count(b) >= 2), 'both beat');
-  a.abort();
-  await assert.rejects(a.done, { name: 'AbortError' });
-  assert.ok(await until(() => s.worker.aborted === 1), `exactly the one request was cancelled (the model server saw ${s.worker.aborted} cancelled of ${s.worker.requests.length} requests: ${JSON.stringify(s.worker.requests.map(r => r.directive ?? r.summary ?? '?'))})`);
-  const frozen = count(a);
-  const bBefore = count(b);
-  assert.ok(await until(() => count(b) >= bBefore + 2), 'the other chat keeps getting beats');
-  assert.equal(count(a), frozen, 'the chat that left gets nothing more');
-  assert.equal(s.worker.aborted, 1, 'the other model request was not cancelled');
-  b.abort();
-  await assert.rejects(b.done, { name: 'AbortError' });
-  assert.ok(await until(() => s.worker.aborted === 2));
-  assert.ok(s.alive());
-});
-
-test('route: a normal answer is unchanged (beats only fill silence) and the stream still ends', { timeout: 40_000 }, async t => {
-  const s = await setup(t, 20_000);   // longer than the test: no beat should appear in a fast answer
-  const frames = await s.chat('chat-beat-fast', 'SCRIPT:echo hello there').done;
-  assert.equal(frames.filter(f => f.type === 'delta').map(f => f.text).join(''), 'hello there');
-  assert.equal(frames.filter(f => f.type === 'beat').length, 0);
-  assert.equal(frames.at(-1).type, 'done');
 });
 
 test('the desktop consumer ignores a frame type it does not know (so beat changes nothing there)', () => {

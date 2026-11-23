@@ -1,7 +1,6 @@
 /**
- * Small host-owned schedules. No catch-up bursts. A task runs as the agent (a Harness session of its own) under the mode it was
- * given when it was created: `plan` (looks, changes nothing), `manual` (asks first: nobody is there to answer, so it stops at the
- * first thing that needs a yes and says what that was) or `bypass` (full access). The default is `plan`.
+ * Small host-owned schedules. No catch-up bursts. A task sends its prompt to the loaded model as a plain chat turn (no tools).
+ * `mode` is still validated and saved so tasks written by older versions keep loading; it no longer changes how a task runs.
  */
 import { randomUUID } from 'node:crypto';
 import { lastLine } from './task-report.mjs';

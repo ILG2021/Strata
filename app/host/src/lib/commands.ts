@@ -35,7 +35,6 @@ export const DESTINATIONS: { route: Route; label: string; icon: IconName; keywor
   { route: 'serving', label: 'Serving', icon: 'link', keywords: 'api server endpoint openai anthropic port', key: '3', slash: 'serve' },
   { route: 'models', label: 'Models', icon: 'models', keywords: 'download weights gguf choose tune engine parameters context sampling', key: '4', slash: 'model' },
   { route: 'tasks', label: 'Tasks', icon: 'clock', keywords: 'schedule recurring loop automation', key: '6', slash: 'tasks' },
-  { route: 'skills', label: 'Skills', icon: 'skills', keywords: 'instructions prompts abilities', key: '7', slash: 'skills' },
   { route: 'settings', label: 'Settings', icon: 'settings', keywords: 'preferences theme appearance text size', key: '8' },
 ];
 export const APP_COMMANDS: AppCommand[] = [

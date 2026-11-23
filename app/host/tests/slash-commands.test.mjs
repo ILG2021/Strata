@@ -32,9 +32,10 @@ test('/loop, /loop stop and the words for how often', () => {
   assert.equal(loopEvery(7200000), 'every 2 hours');
 });
 
-test('the slash menu lists /time-skip, /goal and /loop with plain descriptions, and /loop no longer just opens Tasks', async () => {
+test('the slash menu lists /loop with a plain description, has no coding-agent commands, and /loop no longer just opens Tasks', async () => {
   const chat = await readFile('src/screens/Chat.tsx', 'utf8');
-  for (const [label, words] of [['/time-skip', 'Try a change on a copy'], ['/goal', 'keep working until it is done'], ['/loop', 'every few minutes']]) {
+  for (const gone of ['/time-skip', '/goal', '/plan', '/research', '/compact', '/subagents']) assert.ok(!chat.includes(`label: '${gone}'`), `${gone} is not in the menu`);
+  for (const [label, words] of [['/loop', 'every few minutes']]) {
     const line = chat.split('\n').find(l => l.includes(`label: '${label}'`));
     assert.ok(line, `${label} is in the menu`);
     assert.ok(line.includes(words), `${label} has a plain description`);
@@ -43,12 +44,11 @@ test('the slash menu lists /time-skip, /goal and /loop with plain descriptions, 
   assert.ok(!/slash: \['loop'\]/.test(commands), 'the old /loop alias that only opened Tasks is gone');
 });
 
-test('the store sends /loop to the loop and /time-skip to a real job when a local model is ready', async () => {
+test('the store sends /loop to the loop', async () => {
   const store = await readFile('src/lib/store.ts', 'utf8');
   assert.match(store, /parseLoop\(text\.trim\(\)\)/);
-  assert.match(store, /startTimeSkipReal\(demoPrompt\)/);
-  assert.match(store, /nativeState\(\)\?\.instances\.some\(i => i\.status === 'ready'\)/);
-  assert.match(store, /!m\.timeSkipId && !m\.local/, 'notes from the app and trial turns are not sent back to the model');
+  assert.ok(!/timeSkip|TimeSkip/.test(store), 'there is no Time-skip any more');
+  assert.match(store, /\.filter\(m => !m\.local\)/, 'notes from the app are not sent back to the model');
 });
 
 test('the new slash-command, Time-skip and Tools words are translated in every language, with their slots', async () => {

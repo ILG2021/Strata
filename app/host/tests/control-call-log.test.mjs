@@ -1,11 +1,9 @@
 // SOAK-APP 11-17 13:20: a model Unload stayed pending for 5 min 46 s and nothing in the host log said which call to Control it was waiting for, or for how long.
-// Every call to Control now writes its start and its end with the time it took. Also: a Windows taskkill of the Harness (synchronous: it blocks the host's whole event
-// loop, every timer and every HTTP call, until it returns) has an end.
+// Every call to Control now writes its start and its end with the time it took.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { controlCallName, createControl } from '../server/control-runtime.mjs';
-import { TASKKILL_TIMEOUT_MS, taskkillTree } from '../server/agent/harness-runtime.mjs';
 
 const control = { dir: '/c', python: 'p', cli: 'c' };
 
@@ -54,22 +52,3 @@ test('controlCallName: the first two words, the profile only when it is a plain 
   assert.equal(controlCallName(['runtime', 'start', '--profile', 'C:\\Users\\x\\p']), 'runtime start');
 });
 
-test('taskkillTree ends the tree of one PID and is bounded, so a stalled taskkill cannot freeze the host', () => {
-  assert.ok(TASKKILL_TIMEOUT_MS > 0 && TASKKILL_TIMEOUT_MS <= 15_000);
-  let seen = null;
-  const result = taskkillTree(4242, (cmd, args, options) => { seen = { cmd, args, options }; return { status: null, error: Object.assign(new Error('spawnSync taskkill ETIMEDOUT'), { code: 'ETIMEDOUT' }) }; });
-  assert.deepEqual(seen.args, ['/PID', '4242', '/T', '/F']);
-  assert.equal(seen.cmd, 'taskkill');
-  assert.equal(seen.options.timeout, TASKKILL_TIMEOUT_MS);
-  assert.equal(seen.options.stdio, 'ignore');
-  assert.equal(seen.options.windowsHide, true);
-  assert.equal(result.error.code, 'ETIMEDOUT');     // a timeout is a result, never a throw
-});
-
-test('no taskkill in the Harness launcher is started without a time limit', () => {
-  const source = readFileSync(new URL('../server/agent/harness-runtime.mjs', import.meta.url), 'utf8');
-  assert.equal(source.split('\n').filter(l => /spawnSync\(\s*'taskkill'/.test(l)).length, 0, 'taskkill is only started by taskkillTree');
-  const started = source.split('\n').filter(l => /\brun\('taskkill'/.test(l));
-  assert.equal(started.length, 1);
-  assert.match(started[0], /timeout: TASKKILL_TIMEOUT_MS/);
-});

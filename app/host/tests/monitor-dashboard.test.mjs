@@ -92,7 +92,7 @@ test('original requests, cache, progress, hardware and MCP facts are translated 
   assert.equal(mapped.conversationCache.memoryGb,2);assert.equal(mapped.totals.cachedTokens,2000);
   assert.equal(mapped.expertCache.memoryGb,8);assert.equal(mapped.hardware.vramUsedGb,4);
   assert.equal(mapped.generation.total,600);assert.equal(mapped.history[0].gpuTempC,null);
-  assert.equal(mapped.mcp.servers[0].state,'ready');assert.equal(mapped.mcp.servers[0].tools[0].name,'read_file');
+  assert.equal(mapped.mcp,undefined);
 });
 
 test('All GPUs: a card with no temperature sensor is left out and the card that reports is named (#3727 follow-up)',()=>{
