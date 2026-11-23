@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def load_mcp():
-    spec = importlib.util.spec_from_file_location("strata_mcp_probe_test", ROOT / "tools" / "strata_mcp.py")
+    spec = importlib.util.spec_from_file_location("installer_worker_probe_test", ROOT / "tools" / "installer_worker.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

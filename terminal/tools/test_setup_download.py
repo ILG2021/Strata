@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp  # noqa: E402
+import installer_worker  # noqa: E402
 
 CHUNK = 64 << 10                                       # the tests' piece size (setup uses 32 MiB)
 DATA = bytes((i * 7 + (i >> 8)) & 0xFF for i in range(CHUNK * 40 + 12345))       # 40 whole pieces and a short last one
@@ -566,7 +566,7 @@ class Progress(unittest.TestCase):
             self.assertTrue(bar)
             for x in bar:
                 self.assertRegex(x, r"^  the model: +[\d.]+ / [\d.]+ GB \(\d+%\) +$")
-            parsed = strata_mcp.install_progress(bar)["download"]
+            parsed = installer_worker.install_progress(bar)["download"]
             self.assertEqual(parsed["file"], "the model")
             self.assertEqual(parsed["percent"], 100)
             self.assertEqual(parsed["total_gb"], round(len(DATA) / 1e9, 2))

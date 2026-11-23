@@ -1,7 +1,7 @@
 // FIX2-APP-0216 A9 (retest WIN owner-PC F2): the first-run "Checking what your computer can run..." line lasted 23 s.
 // Measured: the host's first read of the PC is the hardware probe (about 2 s of PowerShell and nvidia-smi calls), Control's own calls (about 1 s) and strata_status,
 // which waited the full 2 s HTTP timeout for EVERY port nobody listens on (the default port and one per prepared model; Windows never answers "refused" on a
-// closed loopback port). Fixed in Control (terminal/tools/strata_mcp.py: port_accepts, probe_many; terminal/tests/desktop/test_status_probe.py). Here: the host starts
+// closed loopback port). Fixed in Control (terminal/tools/installer_worker.py: port_accepts, probe_many; terminal/tests/desktop/test_status_probe.py). Here: the host starts
 // that read when the packaged app starts, and the line says it is still working after 12 s.
 import './helpers/isolate-profile.mjs';
 import test from 'node:test';

@@ -117,7 +117,7 @@ const chatStore = createChatStore({ dir: store.DATA_DIR, privateDir: makePrivate
 try { rmSync(join(store.DATA_DIR, 'model-providers.json'), { force: true }); } catch { /* not there, or not removable now */ }
 const imageModels = createImageModels({ dataDir: store.DATA_DIR, modelsDir: () => store.MODELS_DIR, real: models.REAL, changed: value => hub.send('image-models', value) });
 /* The installed app ships Strata Control (python + strata_control) next to the host; a source checkout has none and keeps its older paths. */
-const CONTROL = findControl();
+const CONTROL = findControl({ requireInstaller: true });
 const control = createControl({ control: CONTROL, log: line => console.log(line) });
 // Files a run as administrator made in Strata's own folders (owner Administrators) are given back to the user at every start; best effort, never blocks.
 if (control && process.platform === 'win32' && !process.env.STRATA_NO_REPAIR_ACCESS) void control.repairAccess().catch(() => {});

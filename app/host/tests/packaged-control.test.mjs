@@ -53,7 +53,7 @@ test('the Control component is found by STRATA_CONTROL_DIR or beside the host, a
 
 test("Control runs on its own interpreter with nothing from the user's Python and acquiring forbidden", () => {
   const control = { dir: '/c', python: '/c/python/python3', cli: '/c/strata.py' };
-  const env = controlEnvironment(control, { env: { PYTHONHOME: 'x', PYTHONPATH: 'y', VIRTUAL_ENV: 'z', STRATA_PYTHON: 'q', PATH: 'p', STRATA_API_KEY: 'secret' }, components: '/components' });
+  const env = controlEnvironment(control, { env: { PYTHONHOME: 'x', PYTHONPATH: 'y', VIRTUAL_ENV: 'z', STRATA_PYTHON: 'q', PATH: 'p', STRATA_API_KEY: 'secret', SSLKEYLOGFILE: 'unwritable', SslKeyLogFile: 'mixed-case' }, components: '/components' });
   assert.equal(env.PYTHONHOME, undefined);
   assert.equal(env.PYTHONPATH, undefined);
   assert.equal(env.VIRTUAL_ENV, undefined);
@@ -62,6 +62,8 @@ test("Control runs on its own interpreter with nothing from the user's Python an
   assert.equal(env.STRATA_NO_ACQUIRE, '1');
   assert.equal(env.STRATA_COMPONENTS_DIR, '/components');
   assert.equal(env.STRATA_API_KEY, undefined, 'an inherited inference key never reaches the engine (the run config carries its own)');
+  assert.equal(env.SSLKEYLOGFILE, undefined);
+  assert.equal(env.SslKeyLogFile, undefined);
   assert.equal(env.PATH, 'p');
   // the resolver prefers the bundled interpreter over py -3 / PATH / a venv
   const python = resolvePython({ repo: '/repo', control, env: {}, exists: () => true, starts: () => { throw new Error('must not probe'); }, useCache: false });
@@ -148,7 +150,7 @@ function packagedFixture({ engineUsable = true, updater = null, repair = false, 
     if (healthDown && /\/health/.test(url)) throw new Error('the engine does not answer');
     return Response.json({ status: 'ok' });
   };
-  // The only process the host may start is Control's installer (its bundled tools/strata_mcp.py on Control's Python); the fake
+  // The only process the host may start is Control's installer (its bundled tools/installer_worker.py on Control's Python); the fake
   // answers like it: the catalog, the hardware with the GPUs, and an install plan or job.
   const catalog = { families: [{ family: 'qwen', title: 'Qwen3.8-Flash-Next', about: 'x', images: true, experimental: false, sizes: [
     { id: 'q2_0', model: 'Q2_0', download_gb: 66.4, ram_needed_gb: 48, about: 'fast', on_this_pc: 'fits', installed: false, images: true, experimental: false },
@@ -158,30 +160,28 @@ function packagedFixture({ engineUsable = true, updater = null, repair = false, 
   let installJob = null;
   const spawnProcess = (command, args, options) => {
     spawned.push({ command, args, options });
-    if (!String(args[0]).endsWith('strata_mcp.py')) throw new Error('no process but the installer may be started by the host in packaged mode: ' + command + ' ' + args.join(' '));
+    if (!String(args[0]).endsWith('installer_worker.py')) throw new Error('no process but the installer may be started by the host in packaged mode: ' + command + ' ' + args.join(' '));
     const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.exitCode = null;
     child.kill = () => { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); return true; };
     child.stdin = { write(line) {
       const message = JSON.parse(line); if (!message.id) return;
-      if (message.method === 'tools/call') rpc.push(message.params);
+      rpc.push(message.params);
       let result;
-      if (message.method === 'initialize') result = { protocolVersion: '2024-11-05' };
-      else if (message.method === 'tools/list') result = { tools: ['strata_models', 'strata_status', 'strata_install', 'strata_remove'].map(name => ({ name })) };
-      else if (message.params.name === 'strata_models') result = { structuredContent: catalog };
+      if (message.params.name === 'strata_models') result = { structuredContent: catalog };
       else if (message.params.name === 'strata_remove') result = { structuredContent: { summary: 'Deleted', plan: { gb: 1.2 }, failed: [] } };
       else if (message.params.name === 'strata_status') result = { structuredContent: { hardware, recommendation: catalog.recommendation, install: installJob, running: [], summary: 'x' } };
       else if (message.params.arguments?.confirm) { installJob = { running: false, exit_code: 0 }; result = { structuredContent: { summary: 'Install started', plan: { download_gb: 66.4 }, install: { running: true, step: 'downloading' } } }; }
       else if (message.params.arguments?.cancel === undefined && message.params.arguments?.confirm === undefined) result = { structuredContent: installPoll ?? { summary: 'Install finished', install: { running: false, exit_code: 0 } } };
       else result = { structuredContent: { summary: 'Plan', plan: { title: 'Qwen3.8-Flash-Next Q2_0', download_gb: 66.4, disk_short: null } } };
-      const deliver = answer => queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: answer }) + String.fromCharCode(10))));
+      const deliver = answer => queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: message.id, ...(answer.isError ? { error: { message: answer.structuredContent.error } } : { result: answer.structuredContent }) }) + String.fromCharCode(10))));
       /* a test can take over the answer to a tool call (to answer later, or differently): rpcHook(params, usualAnswer, deliver) returns true when it will deliver */
-      if (rpcHook && message.method === 'tools/call' && rpcHook(message.params, result, deliver)) return;
+      if (rpcHook && rpcHook(message.params, result, deliver)) return;
       deliver(result);
     } };
     return child;
   };
   const native = createNativeControl({ control, directory: data, spawnProcess, fetcher, requests: () => requests });
-  const others = () => spawned.filter(s => !String(s.args[0]).endsWith('strata_mcp.py'));
+  const others = () => spawned.filter(s => !String(s.args[0]).endsWith('installer_worker.py'));
   return { native, calls, saved, spawned, others, rpc, setStatus: v => { statusAnswer = v; }, setMetricsDown: v => { metricsDown = v; }, setHealthDown: v => { healthDown = v; }, failStart: (v, times = Infinity) => { startFailure = v; startFailureLeft = times; }, catalog, hardware, install, root, cleanup: () => { if (earlierInstallEnv === undefined) delete process.env.STRATA_INSTALL_DIR; else process.env.STRATA_INSTALL_DIR = earlierInstallEnv; rmSync(root, { recursive: true, force: true }); } };
 }
 const finish = async (native, id) => { for (let i = 0; i < 400; i++) { const job = native.state().jobs.find(j => j.id === id); if (job.state !== 'running') return job; await new Promise(r => setTimeout(r, 10)); } throw new Error('job did not finish'); };
@@ -204,7 +204,7 @@ test('packaged: models come from Control, no python, git or engine process is st
     assert.equal(state.hardware.ram_gb, 63);
     const installer = f.spawned[0];
     assert.equal(installer.command, join(f.root, 'control', 'python', 'python.exe'));
-    assert.deepEqual(installer.args.slice(1), ['--root', f.install, '--src', join(f.root, 'control')]);
+    assert.deepEqual(installer.args.slice(1), ['--worker', '--root', f.install, '--src', join(f.root, 'control')]);
     assert.equal(installer.options.env.STRATA_CONTROL_INSTALL, '1');
     assert.equal(installer.options.env.STRATA_NO_ACQUIRE, '1', 'the installer process itself may not acquire; only its explicit install job does');
     assert.equal(installer.options.env.STRATA_INSTALL_DIR, f.install);

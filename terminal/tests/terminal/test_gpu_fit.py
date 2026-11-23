@@ -130,7 +130,7 @@ class GpuFitRule(unittest.TestCase):
 
 
 class GpuFitInTheModelList(unittest.TestCase):
-    """The app reads the options from the model list (tools/strata_mcp.py model_table): the same rule, nothing duplicated in the UI."""
+    """The app reads the options from the model list (tools/installer_worker.py model_table): the same rule, nothing duplicated in the UI."""
 
     def setUp(self):
         from tests.terminal.launch_support import Home

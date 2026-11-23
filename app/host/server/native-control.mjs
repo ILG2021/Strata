@@ -75,7 +75,7 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
  mkdirSync(directory,{recursive:true});
  const settingsPath=join(directory,'native-host.json');
  let preferences=readJson(settingsPath,{repo:defaultRepo});
- let child=null,seq=0,buffer='',pending=new Map(),definitions=[],refreshing=null,lastRead=0,connecting=null,installStart=null;
+ let child=null,seq=0,buffer='',pending=new Map(),refreshing=null,lastRead=0,connecting=null,installStart=null;
  /* QAGUI 0213: until Control has answered once, the state says it is still being asked (`checking`), not that nothing is installed. A failed read during Control's start is read again after a few seconds instead of standing for 45 s; after READ_TRIES failures the answer is final and the error shows. */
  let everRead=false,failedReads=0;const READ_TRIES=4,RETRY_MS=3000;
  let snapshot={available:false,repo:preferences.repo,summary:'Connect a local Strata installation.',catalog:null,installed:null,hardware:null,error:null};
@@ -95,7 +95,7 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
  const packaged=!!control;
  /* The auto-tuner and the saved tunings are Strata Control's (`strata tune auto`, `strata presets`): the app runs them and follows their status file. */
  const autotuner=createAutoTune({spawnProcess,workDir:join(directory,'native-tune'),launcher:()=>{if(packaged)return {command:control.control.python,prefix:[control.control.cli],cwd:control.control.dir,env:controlEnvironment(control.control)};const py=python();return {command:py.command,prefix:[...py.args,join(repo(),'strata.py')],cwd:repo(),env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8'}};}});
- /* In the packaged app the model catalog, the GPU probe and the install job are Control's bundled tools/strata_mcp.py and
+ /* In the packaged app the model catalog, the GPU probe and the install job are Control's bundled tools/installer_worker.py and
     setup.py, run on Control's own Python in the installer's mode (STRATA_CONTROL_INSTALL: no pip, no engine, no compiler).
     The install only runs when the user clicks Download; starting and serving (control.start) keep STRATA_NO_ACQUIRE. */
  const defaultInstall=()=>process.env.STRATA_INSTALL_DIR?resolve(process.env.STRATA_INSTALL_DIR):join(dirname(componentsDirectory()),'install');
@@ -142,23 +142,21 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
  function controlSettingsFile(){return process.env.STRATA_SETTINGS_FILE||join(dirname(componentsDirectory()),'app-settings.json');}
  /* One models folder for the app and the Terminal: the one changed last wins and the other settings file is updated (nothing is moved). */
  function shareDataFolder(){if(!packaged)return;try{let at=0;if(preferences.downloadDirectory)try{at=statSync(settingsPath).mtimeMs/1000;}catch{/* no file yet */}const found=syncDataFolder({appFile:controlSettingsFile(),terminalFile:terminalSettingsFile(),app:preferences.downloadDirectory?{folder:preferences.downloadDirectory,at}:null});if(found.from==='terminal'&&found.folder&&found.folder!==preferences.downloadDirectory){preferences={...preferences,downloadDirectory:found.folder};writeFileSync(settingsPath,JSON.stringify(preferences,null,2),{mode:0o600});}}catch{/* the shared setting is a convenience: never stop the app */}}
- function repo(){if(packaged)return installRoot();let path=realpathSync(preferences.repo);if(existsSync(join(path,'terminal','setup.py')))path=join(path,'terminal');if(!existsSync(join(path,'setup.py'))||!existsSync(join(path,'tools/strata_mcp.py'))||!existsSync(join(path,'serve/server.py')))throw new Error('Choose the Strata repository folder containing setup.py and tools/strata_mcp.py.');return path;}
+ function repo(){if(packaged)return installRoot();let path=realpathSync(preferences.repo);if(existsSync(join(path,'terminal','setup.py')))path=join(path,'terminal');if(!existsSync(join(path,'setup.py'))||!existsSync(join(path,'tools/installer_worker.py'))||!existsSync(join(path,'serve/server.py')))throw new Error('Choose the Strata repository folder containing setup.py and tools/installer_worker.py.');return path;}
  function python(){return resolvePython({repo:preferences.repo});}
- function send(method,params,timeout=30000){return new Promise((resolve,reject)=>{const id=++seq;const alarm=setTimeout(()=>{pending.delete(id);reject(new Error('The native engine did not respond in time. Check engine logs.'));},timeout);pending.set(id,{resolve,reject,alarm});child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});}
- function disconnect(){child?.kill();child=null;definitions=[];for(const p of pending.values()){clearTimeout(p.alarm);p.reject(new Error('Native control connection closed.'));}pending.clear();}
- async function connect(){if(closing)throw new Error("The host is shutting down.");if(child&&definitions.length)return;if(!connecting)connecting=startClient().finally(()=>{connecting=null;});return connecting;}
+ function send(name,args,timeout=30000){return new Promise((resolve,reject)=>{const id=++seq;const alarm=setTimeout(()=>{pending.delete(id);reject(new Error('The native engine did not respond in time. Check engine logs.'));},timeout);pending.set(id,{resolve,reject,alarm});child.stdin.write(JSON.stringify({id,params:{name,arguments:args}})+'\n');});}
+ function disconnect(){child?.kill();child=null;for(const p of pending.values()){clearTimeout(p.alarm);p.reject(new Error('Native control connection closed.'));}pending.clear();}
+ async function connect(){if(closing)throw new Error("The host is shutting down.");if(child)return;if(!connecting)connecting=startClient().finally(()=>{connecting=null;});return connecting;}
  async function startClient(){
   const folder=repo();
   buffer='';const py0=packaged?{command:control.control.python,args:[]}:python();
-  const script=packaged?join(control.control.dir,'tools/strata_mcp.py'):join(folder,'tools/strata_mcp.py');
-  const client=child=spawnProcess(py0.command,[...py0.args,script,...(packaged?['--root',folder,'--src',control.control.dir]:[])],{cwd:packaged?control.control.dir:folder,windowsHide:true,stdio:['pipe','pipe','pipe'],env:packaged?installerEnvironment(control.control,{installDir:folder}):{...process.env,PYTHONUNBUFFERED:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8'}});
+  const script=packaged?join(control.control.dir,'tools/installer_worker.py'):join(folder,'tools/installer_worker.py');
+  const client=child=spawnProcess(py0.command,[...py0.args,script,'--worker',...(packaged?['--root',folder,'--src',control.control.dir]:[])],{cwd:packaged?control.control.dir:folder,windowsHide:true,stdio:['pipe','pipe','pipe'],env:packaged?installerEnvironment(control.control,{installDir:folder}):{...process.env,PYTHONUNBUFFERED:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8'}});
   client.stdout.on('data',chunk=>{if(child!==client)return;buffer+=chunk.toString();let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);let message;try{message=JSON.parse(line);}catch{continue;}const p=pending.get(message.id);if(p){clearTimeout(p.alarm);pending.delete(message.id);message.error?p.reject(new Error(message.error.message)):p.resolve(message.result);}}});
   child.stderr.on('data',chunk=>append('control',chunk.toString()));
   client.on('error',error=>{if(child===client){snapshot.error=error.message;disconnect();}});
   client.on('exit',()=>{if(child===client){child=null;for(const p of pending.values()){clearTimeout(p.alarm);p.reject(new Error('Strata control stopped. Python 3.10 or newer is required.'));}pending.clear();}});
-  await send('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'Strata UI',version:'0.1.0'}});
-  child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
-  definitions=(await send('tools/list',{})).tools??[];
+
  }
  async function controlTool(name){
   if(name==='strata_status'){
@@ -168,7 +166,7 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
    const list=await control.installedModels({installDir:installRoot()});
    packagedInstall=list.install_dir;
    const engine=await control.engine();
-   const installer=await mcpCall('strata_status',{hardware:true}).catch(error=>({error:error.message}));
+   const installer=await installerCall('strata_status',{hardware:true}).catch(error=>({error:error.message}));
    const disk=Object.fromEntries((installer.installed?.models??[]).map(m=>[m.model,{diskGb:m.disk_gb,diskBytes:m.disk_bytes,sharedBytes:m.shared_bytes,removableGb:m.removable_gb,partsMissing:m.parts_missing??0,missingFiles:m.missing_files}]));
    const onlyPictures=m=>m.component_status==='missing_or_invalid'&&Array.isArray(m.missing)&&m.missing.length>0&&m.missing.every(p=>p?.part==='vision/mmproj')&&Array.isArray(m.issue_codes)&&m.issue_codes.length===m.missing.length&&m.issue_codes.every(c=>/^COMPONENT_(MISSING|INVALID)$/.test(c));
    const models=(list.models??[]).filter(m=>m.component_status!=='invalid'&&m.source_config).map(m=>({...(disk[m.id]??{}),model:m.id,config:basename(m.source_config),configPath:m.source_config,model_name:m.name,context:m.context_tokens??0,backend:m.backend,ready:(m.component_status==='present'||onlyPictures(m))&&!(disk[m.id]?.partsMissing),/* Only the picture file is gone (run config has the picture section, the file does not exist): the model is not "missing files". It loads, and the Load fetches the picture file again. */picturesMissing:m.component_status!=='present'&&onlyPictures(m),missing:missingNames(m.missing,disk[m.id]?.missingFiles),images:'off',port:undefined,last_used:null,...(m.component_status==='retired'?{retired:{line:m.retired_line,refusal:m.refusal}}:{})}));
@@ -181,8 +179,8 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
   }
   throw new Error(`Strata Control has no ${name}.`);
  }
- async function tool(name,args={}){if(packaged&&name==='strata_status')return controlTool(name,args);return mcpCall(name,args);}
- async function mcpCall(name,args={}){await connect();if(!definitions.some(d=>d.name===name))throw new Error(`This Strata installation does not support ${name}. Update the installation first.`);const result=await send('tools/call',{name,arguments:args},120000);let value=result.structuredContent;if(!value){const text=result.content?.find(c=>c.type==='text')?.text;try{value=JSON.parse(text);}catch{value={summary:text};}}if(result.isError)throw new Error(value?.error??value?.summary??'Native operation failed.');return value;}
+ async function tool(name,args={}){if(packaged&&name==='strata_status')return controlTool(name,args);return installerCall(name,args);}
+ async function installerCall(name,args={}){await connect();return send(name,args,120000);}
  async function refresh(force=false){
   if(ready)await ready.catch(()=>{});
   if(closing)return state();
@@ -945,7 +943,7 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
  }
  async function cancel(id){const job=jobs.get(id);if(!job||job.state!=='running')throw new Error('This operation is no longer running.');job.engineAbort?.abort();/* (a load's drafter download too, not only an install's engine download) */if(job.kind==='install'){await tool('strata_install',{cancel:true});}else if(job.kind==='models-move'){/* a safe stop: the copy in flight is dropped, files already moved stay */try{writeFileSync(job.cancelFile,'stop');}catch{/* the run ends anyway */}job.summary='Stopping…';emit();return state();}else if(job.abort)job.abort.abort();else if(job.process){if(!['tune','calibrate','autotune','recheck'].includes(job.kind))throw new Error('File updates cannot be cancelled safely while files are being replaced.');job.state='cancelled';await stopProcess(job.process);}job.state='cancelled';job.summary=job.kind==='install'?'Stopped. Completed downloads are kept.':'Stopped.';emit();return state();}
  /* A call to the installer made while the connection is being closed: it may start the installer again (connect() refuses once closing is set). */
- async function quitCall(name,args,timeout){if(!child||!definitions.length){if(connecting)await connecting;else await startClient();}const result=await send('tools/call',{name,arguments:args},timeout);let value=result.structuredContent;if(!value){const text=result.content?.find(c=>c.type==='text')?.text;try{value=JSON.parse(text);}catch{value={summary:text};}}return value??{};}
+ async function quitCall(name,args,timeout){if(!child){if(connecting)await connecting;else await startClient();}return send(name,args,timeout);}
  /* Quitting while "Prepare and load" runs: the installer's job (setup and the model packer under it) is stopped, and the stop is checked. Three things made it miss before: a start
     still on its way (the installer launches the job when it gets its lock, after a cancel that found nothing to stop), no connection to the installer at that moment (the cancel was
     skipped), and a cancel whose answer was never looked at. The packer's half-written files stay on disk and the next preparation resumes them (tools/iq_pack.py). */

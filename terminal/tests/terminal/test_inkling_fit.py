@@ -135,7 +135,7 @@ class TestInklingFitAndHardwareSelection(unittest.TestCase):
     def test_dgx_spark_gb10_linux_aarch64_auto_selects_sq20(self):
         from strata_control import targets
         import setup as setup_mod
-        from tools import strata_mcp
+        from tools import installer_worker
 
         ok, why = targets.backend_supported("cuda", "linux-aarch64")
         self.assertTrue(ok, why)
@@ -157,7 +157,7 @@ class TestInklingFitAndHardwareSelection(unittest.TestCase):
             self.assertEqual(rec["build"], "SQ-20")
             self.assertTrue(rec["fits"])
             self.assertEqual(rec["mode"], "full_vram")
-            row = strata_mcp.Strata.inkling_fit_row(None, "SQ-20", 128.0, [gpu])
+            row = installer_worker.Strata.inkling_fit_row(None, "SQ-20", 128.0, [gpu])
             self.assertIsNotNone(row)
             self.assertTrue(row["recommended"])
             self.assertTrue(row["unified"])

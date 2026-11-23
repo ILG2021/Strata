@@ -56,7 +56,7 @@ function newer(a, b) {
  * held back by an older updated one, and an updated Control is never lost to an older bundled one. A tie goes to the first
  * in that order. Returns null in a source checkout (the host then keeps its older paths).
  */
-export function findControl({ env = process.env, platform = process.platform, exists = existsSync, hostDir = resolve(HERE, '..'), components = null } = {}) {
+export function findControl({ env = process.env, platform = process.platform, exists = existsSync, hostDir = resolve(HERE, '..'), components = null, requireInstaller = false } = {}) {
   const updated = updatedControlDirectory({ env, platform, components });
   const candidates = [{ dir: env.STRATA_CONTROL_DIR }, { dir: join(hostDir, '..', 'control') }, ...(updated ? [updated] : [])]
     .filter(c => c.dir).map(c => ({ ...c, dir: resolve(c.dir) }));
@@ -64,6 +64,7 @@ export function findControl({ env = process.env, platform = process.platform, ex
   for (const candidate of candidates) {
     const python = bundledPython(candidate.dir, platform);
     if (!(exists(python) && exists(join(candidate.dir, 'strata.py')) && exists(join(candidate.dir, 'strata_control')))) continue;
+    if (requireInstaller && !exists(join(candidate.dir, 'tools', 'installer_worker.py'))) continue;
     let bundle = null;
     try { bundle = JSON.parse(readFileSync(join(candidate.dir, 'BUNDLE.json'), 'utf8').replace(/^﻿/, '')); } catch { /* optional */ }
     const found = { dir: candidate.dir, python, cli: join(candidate.dir, 'strata.py'), bundle, key: versionKey(bundle?.version ?? candidate.version) };
@@ -89,6 +90,11 @@ export function sourceServerEnvironment(env = process.env) {
 export function controlEnvironment(control, { env = process.env, components = componentsDirectory({ env }), acquire = false } = {}) {
   const next = { ...env };
   for (const key of ['PYTHONHOME', 'PYTHONPATH', 'PYTHONSTARTUP', 'VIRTUAL_ENV', 'STRATA_PYTHON', 'STRATA_NATIVE_PYTHON', 'STRATA_API_KEY']) delete next[key];
+  // Python opens this file when constructing a default TLS context, even for a loopback HTTP opener.
+  // Keep inherited TLS key logging out of Control, including Windows environment keys with mixed casing.
+  for (const key of Object.keys(next)) {
+    if (key.toUpperCase() === 'SSLKEYLOGFILE') delete next[key];
+  }
   const result = {
     ...next,
     PYTHONNOUSERSITE: '1', PYTHONUTF8: '1', PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8',
@@ -108,7 +114,7 @@ export function controlEnvironment(control, { env = process.env, components = co
 }
 
 /**
- * The environment of the installer process (tools/strata_mcp.py): Control's, with acquiring still forbidden for the process
+ * The environment of the installer process (tools/installer_worker.py): Control's, with acquiring still forbidden for the process
  * itself. Only the install job it starts when the user asks to download a model lifts that for its own children.
  */
 export function installerEnvironment(control, { env = process.env, installDir, components = componentsDirectory({ env }) } = {}) {

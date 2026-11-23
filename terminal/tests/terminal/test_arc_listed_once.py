@@ -1,5 +1,5 @@
 """An Arc card is listed once (found with #5111's A750 check, p1006 11-16): on a PC whose only card is an Arc and whose engine is the Intel one,
-the shared hardware reader (tools/strata_mcp.py through strata_control/intel_app.py cards_to_add) already holds the card, and the Terminal's
+the shared hardware reader (tools/installer_worker.py through strata_control/intel_app.py cards_to_add) already holds the card, and the Terminal's
 Catalog.hardware added it a second time: "Arc A750 8 GB x2", two usable cards with the same number. Fake reports; no card."""
 from __future__ import annotations
 

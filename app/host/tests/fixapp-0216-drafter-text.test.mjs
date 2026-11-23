@@ -56,18 +56,16 @@ function fixture({ plan, steps = [] }) {
     contexts: [32768, 131072], recommendation: { family: 'qwen', model: 'UD-Q4_K_XL', context: 131072 }, context_note: '' };
   const hardware = { ram_gb: 256, cpu: { name: 'cpu', cores: 32 }, engine_vendor: 'nvidia', gpus: [{ index: 0, name: 'NVIDIA GeForce RTX 3060', vendor: 'nvidia', vram_gb: 12, arch: 86, usable: true }] };
   const spawnProcess = (command, argv) => {
-    if (!String(argv[0]).endsWith('strata_mcp.py')) throw new Error('no process but the installer may be started in packaged mode: ' + command + ' ' + argv.join(' '));
+    if (!String(argv[0]).endsWith('installer_worker.py')) throw new Error('no process but the installer may be started in packaged mode: ' + command + ' ' + argv.join(' '));
     const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.exitCode = null;
     child.kill = () => { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); return true; };
     child.stdin = { write(line) {
       const message = JSON.parse(line); if (!message.id) return;
       let result;
-      if (message.method === 'initialize') result = { protocolVersion: '2024-11-05' };
-      else if (message.method === 'tools/list') result = { tools: ['strata_models', 'strata_status', 'strata_install', 'strata_remove'].map(name => ({ name })) };
-      else if (message.params.name === 'strata_models') result = { structuredContent: catalog };
+      if (message.params.name === 'strata_models') result = { structuredContent: catalog };
       else if (message.params.name === 'strata_status') result = { structuredContent: { hardware, recommendation: catalog.recommendation, install: null, running: [], summary: 'x' } };
       else result = { structuredContent: { summary: 'Install finished', install: { running: false, exit_code: 0 } } };
-      queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + String.fromCharCode(10))));
+      queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: message.id, ...(result.isError ? { error: { message: result.structuredContent.error } } : { result: result.structuredContent }) }) + String.fromCharCode(10))));
     } };
     return child;
   };

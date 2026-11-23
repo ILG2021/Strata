@@ -189,11 +189,9 @@ test('behavioral: native-control tune() and load on-demand Vision fetch keep Hy4
       write(line) {
         const msg = JSON.parse(line); if (!msg.id) return;
         let result = {};
-        if (msg.method === 'initialize') result = { protocolVersion: '2024-11-05' };
-        else if (msg.method === 'tools/list') result = { tools: ['strata_models', 'strata_status'].map(name => ({ name })) };
-        else if (msg.params?.name === 'strata_models') result = { structuredContent: catalog };
+        if (msg.params?.name === 'strata_models') result = { structuredContent: catalog };
         else if (msg.params?.name === 'strata_status') result = { structuredContent: { hardware: { ram_gb: 128, cpu: { cores: 16 }, gpus: [] }, summary: 'ok' } };
-        queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\n')));
+        queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: msg.id, ...(result.isError ? { error: { message: result.structuredContent.error } } : { result: result.structuredContent }) }) + '\n')));
       },
     };
     return child;

@@ -86,7 +86,7 @@ class GuiLayout(unittest.TestCase):
         real = Path(models.__file__).resolve().parents[1]
         shutil.copy(real / "setup.py", self.terminal)
         (self.terminal / "tools").mkdir()
-        shutil.copy(real / "tools" / "strata_mcp.py", self.terminal / "tools")
+        shutil.copy(real / "tools" / "installer_worker.py", self.terminal / "tools")
         p = mock.patch("strata_cli.launch.catalog.installer_folder", return_value=self.terminal)
         p.start()
         self.addCleanup(p.stop)

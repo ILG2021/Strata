@@ -283,11 +283,11 @@ class OwnFiles(unittest.TestCase):
                 "UD-IQ4_XS-v31": "~4-bit i-quant (Unsloth Dynamic v3.1), a newer file than UD-IQ4_XS with other tensor types"}
         from strata_control import mac_fit
         sys.path.insert(0, str(ROOT / "tools"))
-        import strata_mcp
+        import installer_worker
         for m, a in want.items():
             self.assertEqual(setup.MODELS[m]["about"], a)
             self.assertEqual(mac_fit.MAC_ABOUT[m], a)
-            self.assertEqual(strata_mcp.FALLBACK_MODELS[m]["about"], a)
+            self.assertEqual(installer_worker.FALLBACK_MODELS[m]["about"], a)
         for m in ("UD-IQ1_M", "UD-Q2_0", "UD-IQ2_XS", "UD-Q2_K_XL", "UD-IQ3_XXS", "UD-Q3_K_XL", "UD-IQ4_XS", "UD-Q4_K_XL", "UD-Q5_K_XL", "UD-Q6_K_XL", "Q8_0"):
             self.assertIn(m, setup.SUPPORTED_GGUFS)
         self.assertIn("(Unsloth's UD-IQ1_S, other K-quant files) cannot be used", setup.SUPPORTED_GGUFS)

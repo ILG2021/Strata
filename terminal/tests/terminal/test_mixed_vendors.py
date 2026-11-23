@@ -131,7 +131,7 @@ class LaunchMix(unittest.TestCase):
 
     def test_the_app_catalog_uses_the_engine_make(self):
         cat = catalog(self.hw)
-        mcp = cat.mcp
+        mcp = cat.worker
         hw = dict(self.hw)
         mcp.Strata._engine_vendor(hw)
         self.assertEqual(hw["engine_vendor"], "nvidia")

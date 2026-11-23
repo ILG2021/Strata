@@ -1,6 +1,6 @@
-"""tools/test_strata_mcp.py - tests for tools/strata_mcp.py (Strata's MCP server), standard library only.
+"""tools/test_installer_worker.py - tests for tools/installer_worker.py (the local installer), standard library only.
 
-    python -m unittest tools/test_strata_mcp.py -v
+    python -m unittest tools/test_installer_worker.py -v
 
 Setup and the model server are fakes (a temporary Strata folder with a stand-in setup.py and serve/server.py), so
 nothing is downloaded and no GPU is used: the JSON-RPC handshake, argument checks, install / start / stop with real
@@ -25,7 +25,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))   # strata_control, as pytest's rootdir gives it, also when the file is run directly (#4906)
-import strata_mcp as M  # noqa: E402
+import installer_worker as M  # noqa: E402
 
 FAKE_SETUP = r'''
 import json, sys, time
@@ -211,12 +211,10 @@ class FakeRoot(unittest.TestCase):
                 time.sleep(0.25)
 
     def call(self, name, args=None):
-        """A tools/call through the JSON-RPC layer: (result dict, isError)."""
-        srv = M.McpServer(self.strata, io.BytesIO())
-        r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                        "params": {"name": name, "arguments": args or {}}})
-        res = r["result"]
-        return json.loads(res["content"][0]["text"]), res["isError"]
+        try:
+            return M.Tools(self.strata).call(name, {} if args is None else args), False
+        except M.ToolError as error:
+            return {"error": str(error)}, True
 
     def write_config(self, tag="q2_0", port=8080, **extra):
         cfg = {"exe": sys.executable, "args": ["--max-context", "32768"], "port": port,
@@ -231,67 +229,37 @@ class Protocol(FakeRoot):
     def run_lines(self, msgs):
         inp = io.BytesIO(("\n".join(m if isinstance(m, str) else json.dumps(m) for m in msgs) + "\n").encode())
         out = io.BytesIO()
-        M.McpServer(self.strata, out).serve(inp)
+        M.InstallerWorker(self.strata, out).serve(inp)
         return {m.get("id"): m for m in (json.loads(x) for x in out.getvalue().decode().splitlines())}
 
-    def test_handshake_list_call(self):
-        r = self.run_lines([
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-             "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}},
-            {"jsonrpc": "2.0", "method": "notifications/initialized"},
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "strata_models", "arguments": {}}},
-            {"jsonrpc": "2.0", "id": 4, "method": "ping"},
-        ])
-        init = r[1]["result"]
-        self.assertEqual(init["protocolVersion"], "2025-06-18")
-        self.assertIn("tools", init["capabilities"])
-        self.assertEqual(init["serverInfo"]["name"], "strata")
-        names = [t["name"] for t in r[2]["result"]["tools"]]
-        self.assertEqual(names, ["strata_status", "strata_models", "strata_remove", "strata_install", "strata_start", "strata_stop",
-                                 "strata_logs", "strata_benchmark", "strata_connect_info"])
-        for t in r[2]["result"]["tools"]:
-            self.assertEqual(t["inputSchema"]["type"], "object")
-            self.assertFalse(t["inputSchema"]["additionalProperties"])
-            self.assertGreater(len(t["description"]), 60)
-        call = r[3]["result"]
-        self.assertFalse(call["isError"])
-        self.assertIn("families", call["structuredContent"])
-        self.assertEqual(json.loads(call["content"][0]["text"])["recommendation"]["model"], "IQ3_S")
-        self.assertEqual(r[4]["result"], {})
-        self.assertNotIn(None, r)                       # the notification got no answer
-
-    def test_older_protocol_and_errors(self):
-        r = self.run_lines([
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05"}},
+    def test_local_calls_and_errors(self):
+        responses = self.run_lines([
+            {"id": 1, "params": {"name": "strata_models", "arguments": {}}},
+            {"id": 2, "params": {"name": "strata_start", "arguments": {}}},
+            {"id": 3, "jsonrpc": "2.0", "method": "initialize"},
+            {"id": 4, "jsonrpc": "2.0", "method": "tools/call",
+             "params": {"name": "strata_models", "arguments": {}}},
             "{not json",
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "rm_rf", "arguments": {}}},
-            {"jsonrpc": "2.0", "id": 3, "method": "no/such"},
-            {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "strata_logs", "arguments": []}},
         ])
-        self.assertEqual(r[1]["result"]["protocolVersion"], "2024-11-05")
-        self.assertEqual(r[None]["error"]["code"], -32700)
-        self.assertEqual(r[2]["error"]["code"], -32602)
-        self.assertEqual(r[3]["error"]["code"], -32601)
-        self.assertTrue(r[4]["result"]["isError"])
-        self.assertNotIn("structuredContent", r[4]["result"])   # 2024-11-05 has no structured results
+        self.assertEqual(responses[1]["result"]["recommendation"]["model"], "IQ3_S")
+        self.assertIn("error", responses[2])
+        self.assertIn("error", responses[3])
+        self.assertIn("error", responses[4])
+        self.assertIn("error", responses[None])
 
     def test_real_stdio_process(self):
-        """The script itself over a pipe: stdout carries only JSON-RPC lines."""
-        msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-                {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                 "params": {"name": "strata_logs", "arguments": {"source": "setup"}}}]
-        p = subprocess.run([sys.executable, str(HERE / "strata_mcp.py"), "--root", str(self.root)],
-                           input="\n".join(json.dumps(m) for m in msgs) + "\n", capture_output=True, text=True,
-                           timeout=60, env=dict(os.environ))
-        lines = [json.loads(x) for x in p.stdout.splitlines()]
-        self.assertEqual(sorted(m["id"] for m in lines), [1, 2, 3])
-        self.assertEqual(len(next(m for m in lines if m["id"] == 2)["result"]["tools"]), 9)
+        request = {"id": 1, "params": {"name": "strata_models", "arguments": {}}}
+        p = subprocess.run([sys.executable, str(HERE / "installer_worker.py"), "--worker", "--root", str(self.root)],
+                           input=json.dumps(request) + "\n", capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "PYTHONPATH": str(HERE.parent)})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        response = json.loads(p.stdout)
+        self.assertIn("result", response, p.stderr + str(response))
+        self.assertIn("families", response["result"])
         self.assertIn("ready", p.stderr)
 
     def test_not_a_strata_folder(self):
-        p = subprocess.run([sys.executable, str(HERE / "strata_mcp.py"), "--root", self.tmp.name], input="",
+        p = subprocess.run([sys.executable, str(HERE / "installer_worker.py"), "--worker", "--root", self.tmp.name], input="",
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(p.returncode, 2)
 
@@ -514,7 +482,8 @@ class Install(FakeRoot):
         self.assertTrue(err)
         self.assertIn("cancelled before it started", res["error"])
         self.assertIsNone(self.strata.install_job(), "no job was launched")
-        res, err = self.call("strata_install", {"family": "coder", "confirm": True})   # a start asked for after the cancel goes ahead
+        with mock.patch.object(M.time, "monotonic", return_value=stamp + 5.0):
+            res, err = self.call("strata_install", {"family": "coder", "confirm": True})
         self.assertFalse(err, res)
         self.wait_job()
 
@@ -550,7 +519,7 @@ class StartStop(FakeRoot):
         srv = st["running"][0]
         self.assertEqual(srv["engine_version"], "0.1.32")
         self.assertEqual(srv["gpu"]["total_mib"], 12227)
-        self.assertIn("this MCP server", srv["started_by"])
+        self.assertIn("this installer", srv["started_by"])
 
         res, err = self.call("strata_start", {})            # already running: nothing new
         self.assertIn("already running", res["summary"])
@@ -614,9 +583,9 @@ class StartStop(FakeRoot):
         self.extra.append(p)
         self.assertTrue(wait_for(lambda: self.strata.probe(port) is not None, 30))
         st, _ = self.call("strata_status", {"hardware": False})
-        self.assertIn("outside this MCP server", st["running"][0]["started_by"])
+        self.assertIn("outside this installer", st["running"][0]["started_by"])
         res, err = self.call("strata_start", {})
-        self.assertIn("started outside this MCP server", res["summary"])
+        self.assertIn("started outside this installer", res["summary"])
         res, err = self.call("strata_stop", {})
         self.assertFalse(err, res)
         self.assertIn("only its model was unloaded", res["summary"])
@@ -1088,7 +1057,7 @@ class RemoveMissingFilesTest(unittest.TestCase):
     def test_missing_paths_are_already_removed(self):
         import importlib.util, tempfile, threading
         from pathlib import Path
-        spec = importlib.util.spec_from_file_location("strata_mcp_rm", Path(__file__).with_name("strata_mcp.py"))
+        spec = importlib.util.spec_from_file_location("installer_worker_rm", Path(__file__).with_name("installer_worker.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         with tempfile.TemporaryDirectory() as d:

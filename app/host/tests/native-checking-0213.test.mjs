@@ -39,10 +39,8 @@ function slowControl({ failFirst }) {
     child.kill = () => { child.exitCode = 0; return true; };
     child.stdin = { write(line) {
       const m = JSON.parse(line); if (!m.id) return;
-      const result = m.method === 'initialize' ? { protocolVersion: '2024-11-05' }
-        : m.method === 'tools/list' ? { tools: ['strata_models', 'strata_status'].map(name => ({ name })) }
-        : m.params.name === 'strata_models' ? { structuredContent: catalog } : { structuredContent: { hardware: { ram_gb: 16, gpus: [] }, install: null, running: [], summary: 'x' } };
-      queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\n')));
+      const result = m.params.name === 'strata_models' ? { structuredContent: catalog } : { structuredContent: { hardware: { ram_gb: 16, gpus: [] }, install: null, running: [], summary: 'x' } };
+      queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: m.id, ...(result.isError ? { error: { message: result.structuredContent.error } } : { result: result.structuredContent }) }) + '\n')));
     } };
     return child;
   };

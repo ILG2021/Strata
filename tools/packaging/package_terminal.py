@@ -118,7 +118,7 @@ TOOLS_SUBSET = (
 )
 
 #: What `strata launch` and the desktop app's installer need on top of the read-only terminal: the model catalog and GPU probe
-#: (tools/strata_mcp.py reads setup.py's tables) and the install job, which downloads the model the user chose, prepares it with
+#: (tools/installer_worker.py reads setup.py's tables) and the install job, which downloads the model the user chose, prepares it with
 #: the bundled tools and writes a run config naming "component:strata-engine". setup.py runs in its CONTROL mode there
 #: (STRATA_CONTROL_INSTALL=1: no pip, no engine fetch, no compiler). Entry points; their local imports under tools/ come with them.
 #: The same list the app's Control component stages (app/desktop/scripts/stage-control.py uses these names).
@@ -126,7 +126,7 @@ INSTALLER_FILES = ("setup.py", "ref/load.py")   # ref/load.py: strata_pack.py (t
 #: calibrate: setup.py imports it after a tune (calibrate_config, and the earlier tuning that a rerun applies); it was missing from this
 #: list in 0.1.47, so every launch after a tune failed (#3613, #3467). setup_tool_imports() below also reads setup.py itself, so a tools/
 #: module it starts to import is never forgotten again; tests/terminal/test_bundle_imports.py checks the staged bundle.
-INSTALLER_TOOLS = ("strata_mcp", "iq_pack", "strata_pack", "pack_index", "mtp_fetch", "mtp_pack", "mtp_rt", "draft_vocab",
+INSTALLER_TOOLS = ("installer_worker", "iq_pack", "strata_pack", "pack_index", "mtp_fetch", "mtp_pack", "mtp_rt", "draft_vocab",
                    "strata_tokenizer", "gguf_reader", "calibrate")
 #: tools run BY PATH (`python tools/.../x.py`) by setup.py, strata_cli or strata_control: no import names them, so setup_tool_imports() cannot find
 #: them.  setup.py's by-path tools (nvfp4_local_pack, strata_bench, strata_inspect) were missing from the bundle once.
@@ -452,7 +452,7 @@ def main() -> int:
                          "`strata bench run` records it, and a standard benchmark without it is nonconforming")
     ap.add_argument("--keep-staging", action="store_true")
     ap.add_argument("--no-installer", action="store_true",
-                    help="leave out setup.py, tools/strata_mcp.py and data/ (the read-only terminal of earlier releases; "
+                    help="leave out setup.py, tools/installer_worker.py and data/ (the read-only terminal of earlier releases; "
                          "`strata launch` then cannot list or install models)")
     ap.add_argument("--cache", default=None, help="where the pinned interpreter archive is cached")
     ap.add_argument("--wheelhouse", default=None,

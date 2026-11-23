@@ -292,7 +292,7 @@ class Progress(FetchCase):
         self.assertIn("/ %.2f GB" % (total / 1e9), lines[-1])
         self.assertIn("(100%)", lines[-1])
         import re
-        for x in lines:                                  # the shape tools/strata_mcp.py install_progress reads
+        for x in lines:                                  # the shape tools/installer_worker.py install_progress reads
             self.assertTrue(re.match(r"\s*(\S.*?): +([\d.]+) / ([\d.]+) GB \((\d+)%\)", x), x)
 
     def test_a_resumed_fetch_starts_from_what_is_already_there(self):
@@ -300,8 +300,8 @@ class Progress(FetchCase):
         err = self.fetch(Mirror())
         self.assertIn("(100%)", [x for x in err.splitlines() if "MTP draft layer:" in x][0])
 
-    def test_the_progress_figure_follows_the_job_in_strata_mcp(self):
-        import strata_mcp as MCP
+    def test_the_progress_figure_follows_the_job_in_installer_worker(self):
+        import installer_worker as MCP
         got = MCP.install_progress(["=== Step 6: preparing the model for Strata ===",
                                     "  MTP draft layer:   1.23 / 5.04 GB (24%)"])
         self.assertEqual(got["download"], {"file": "MTP draft layer", "done_gb": 1.23, "total_gb": 5.04, "percent": 24})

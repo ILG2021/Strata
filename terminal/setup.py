@@ -4524,11 +4524,11 @@ def mem_have(model: str, ram: float, vram: float = 0.0) -> float:
 # below the tiers' names (40 / 48 / 64 GB) because the OS reports a little less than the installed memory.  64 GB and
 # up: IQ3_S (the original; Swift 1.5's IQ3_S is an equal choice), 48 GB: IQ3_XXS, 40 GB: Swift 1.5's IQ2_XS, with Gyro-M
 # (35 GB) as the other choice.  Below 40 GB the older rules stand (Gyro-S, or the Coder for code).  The Mac has its own
-# rules (strata_control/mac_fit.py).  tools/strata_mcp.py's recommend() holds the same floors (the app and `strata launch`).
+# rules (strata_control/mac_fit.py).  tools/installer_worker.py's recommend() holds the same floors (the app and `strata launch`).
 MEMORY_TIERS = ((62.0, "qwen", "IQ3_S"), (46.0, "qwen", "IQ3_XXS"), (38.0, "swift", "IQ2_XS"))
 # #3425 (owner's rule): the tiers count RAM + VRAM less this much, which Windows and the system keep for themselves.  A PC
 # with a 16 GB card and 32 GB of RAM used to land in the 48 GB tier and then read ~11 GB of it from the SSD on every answer.
-# tools/strata_mcp.py has the same constant; the Mac (strata_control/mac_fit.py) keeps its own macOS share and does not use it.
+# tools/installer_worker.py has the same constant; the Mac (strata_control/mac_fit.py) keeps its own macOS share and does not use it.
 TIER_SYSTEM_RESERVE_GB = 5.0
 
 
@@ -9107,7 +9107,7 @@ def sycl_setup(argv) -> int:
 
 
 def intel_control_setup(a) -> int:
-    """`--backend sycl` in the app's CONTROL mode (tools/strata_mcp.py passes it for an Intel Arc PC): what the Terminal does for an Arc
+    """`--backend sycl` in the app's CONTROL mode (tools/installer_worker.py passes it for an Intel Arc PC): what the Terminal does for an Arc
     (strata_cli/launch/runner.py adopt_prepared_files): the pack from the model's GGUF files (`--prepare-pack`'s step), then the run config
     (strata_cli/launch/adopt.py), the engine named as the component. Nothing is downloaded, nothing is compiled; Intel
     cards do not download models, so the files must be on the computer (--gguf-dir, or <data folder>/models/<tag>). The older `--backend sycl`

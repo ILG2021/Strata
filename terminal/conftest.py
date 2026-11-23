@@ -44,7 +44,7 @@ except ImportError:
     pass
 
 _home = tempfile.mkdtemp(prefix="strata-pytest-config-")
-# a STRATA_SETTINGS_FILE inherited from the shell would point every test at the real file whatever APPDATA says (strata_mcp.Strata.settings_path): none for the session
+# a STRATA_SETTINGS_FILE inherited from the shell would point every test at the real file whatever APPDATA says (installer_worker.Strata.settings_path): none for the session
 os.environ.pop("STRATA_SETTINGS_FILE", None)
 os.environ["APPDATA"] = _home
 os.environ["XDG_CONFIG_HOME"] = _home

@@ -26,7 +26,7 @@ Contracts that still hold:
 
 - Each loaded instance runs `serve/server.py` on its own private loopback port with a random API key, from a config copy in the app's data folder.
   The one public URL shown in Serving forwards to it; the public model id is an alias in that config, and unknown or ambiguous ids fail before streaming.
-- A source checkout finds a Strata installation through `STRATA_NATIVE_REPO` (it must contain `setup.py`, `tools/strata_mcp.py` and `serve/server.py`) and a Python through
+- A source checkout finds a Strata installation through `STRATA_NATIVE_REPO` (it must contain `setup.py`, `tools/installer_worker.py` and `serve/server.py`) and a Python through
   `STRATA_PYTHON` or `STRATA_NATIVE_PYTHON` (`server/python-resolver.mjs`). The installed app uses the Control that ships beside it instead.
 - Saving settings validates first, keeps unrelated keys and non-Strata environment values, writes a `.bak` and replaces the config atomically. New settings apply on the next load.
 

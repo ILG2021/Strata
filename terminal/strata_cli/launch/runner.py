@@ -1548,7 +1548,7 @@ class Runner:
         try:
             setup_module = cat.strata.setup_module()
             if setup_module is not None and not s.model_path:
-                job["files"] = cat.mcp.expected_files(setup_module, str(s.family), str(s.model), models_dir, self.vision_word() != "no")
+                job["files"] = cat.worker.expected_files(setup_module, str(s.family), str(s.model), models_dir, self.vision_word() != "no")
                 first = next((f for f in job["files"] if f.get("role") == "model"), None)
                 if first:                                    # the folder setup names it (Q2_0), not the lower-case run-config tag (q2_0)
                     job["folder"] = str(Path(first["path"]).parent)
@@ -1631,8 +1631,8 @@ class Runner:
                 continue
             lines.append(line)
             lines[:] = lines[-1500:]
-            prog = cat.mcp.install_progress(lines)
-            prog = cat.mcp.combined_progress(prog, job)
+            prog = cat.worker.install_progress(lines)
+            prog = cat.worker.combined_progress(prog, job)
             dl, phase, label = prog.get("download"), prog.get("phase"), prog.get("label")
             if prog.get("step") != step_seen:
                 step_seen, step_since = prog.get("step"), time.monotonic()

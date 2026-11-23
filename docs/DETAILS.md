@@ -10,7 +10,7 @@ New here? Start with the [README](../README.md). Installing is in [INSTALL.md](I
 
 > **On this page:** [Quick start](#quick-start) · [Speed](#speed-measured) · [Which model?](#which-model) ·
 > [Windows](#windows) · [Linux](#linux) · [Memory modes](#memory-modes) · [Sharing the GPU](#sharing-the-gpu-with-other-programs-optional) ·
-> [API](#using-it) · [MCP tools](#tools-from-mcp-servers) · [MCP server](#manage-strata-from-your-ai-assistant-mcp-server) ·
+> [API](#using-it) · [MCP tools](#tools-from-mcp-servers) ·
 > [Images](#images-vision) · [Speed settings](#speed-settings) · [CPU workers](#cpu-workers-and-thread-placement) ·
 > [Per-card defaults](#rtx-30-series-sm_86-and-tesla-p100-sm_60-bitwise-decode-switches-on-by-default) ·
 > [Troubleshooting](#troubleshooting) · [How it works](#how-it-works) · [Credits](#credits-and-licenses) ·
@@ -1037,22 +1037,6 @@ computer; after saving, it is shown masked.
 **Security.** MCP tools run on your PC with your user's rights, and the model decides when to call them, also because of what
 it reads (a web page or file can contain instructions). Give a filesystem server only the folders it needs, prefer read-only
 tools and add only servers you trust. If Strata is reachable from other devices, set an API key.
-
-## Manage Strata from your AI assistant (MCP server)
-
-`terminal/tools/strata_mcp.py` is an MCP server for Claude Code, Claude Desktop, Cursor, VS Code, Codex and other assistants. Once it is
-added you can ask your assistant to install Strata, start it or check whether it is running. In Claude Code:
-
-```bash
-claude mcp add strata -- python C:\Users\you\Strata\terminal\tools\strata_mcp.py
-```
-
-It has tools for status, the model list, install, start, stop, logs, a speed test and connection settings. Install runs
-`setup.py` with `--yes` in the background and shows the plan first. The MCP server only ends processes it started itself and
-uses only Python's standard library. Config snippets for every client, the tool arguments and the safety rules are in
-[MCP_SERVER.md](MCP_SERVER.md). This is the opposite direction from [Tools from MCP servers](#tools-from-mcp-servers) above.
-
----
 
 ## Images (vision)
 

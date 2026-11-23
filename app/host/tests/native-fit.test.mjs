@@ -76,7 +76,7 @@ test('the page shows the own pick of the engine for this PC first (the same one 
 });
 
 test('the tiers of the engine are 40 GB Swift IQ2_XS, 48 GB IQ3_XXS, 64 GB IQ3_S in both Python places the page and strata launch read', async () => {
-  for (const file of ['../../../terminal/setup.py', '../../../terminal/tools/strata_mcp.py']) {
+  for (const file of ['../../../terminal/setup.py', '../../../terminal/tools/installer_worker.py']) {
     const text = await readFile(new URL(file, import.meta.url), 'utf8');
     const m = /^MEMORY_TIERS\s*=\s*(.*)$/m.exec(text);
     assert.ok(m, file);

@@ -1,11 +1,11 @@
-"""The Intel Arc card in the desktop app (the model setup of Strata Control, tools/strata_mcp.py and setup.py in their CONTROL mode).
+"""The Intel Arc card in the desktop app (the model setup of Strata Control, tools/installer_worker.py and setup.py in their CONTROL mode).
 
 The Terminal (`strata launch`) sets an Arc up in two steps (strata_cli/launch/runner.py adopt_prepared_files): `setup.py --prepare-pack` makes the pack
 from the model's GGUF files, and strata_cli/launch/adopt.py writes the run config, with the engine named as the component (`component:strata-engine`).
 Intel cards do not download models: the files must be on the computer. The app's install job did neither step: it ran setup.py's normal NVIDIA / AMD
 path, which stops with "no NVIDIA GPU found (nvidia-smi did not answer)" (0.2.13 and 0.2.12, found by QAGUI-LIN on an Arc A750).
 
-This module is the part both tools/strata_mcp.py (which engine the install is for; the card list) and setup.py (`--backend sycl` in CONTROL mode)
+This module is the part both tools/installer_worker.py (which engine the install is for; the card list) and setup.py (`--backend sycl` in CONTROL mode)
 share. NVIDIA and AMD are never touched: an Arc is added to the card list only when this PC has no usable NVIDIA or AMD card, and the engine
 Strata Control itself would pick (strata_control/engine_component.py detect_backend) is the Intel one.
 """

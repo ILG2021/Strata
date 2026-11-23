@@ -93,15 +93,11 @@ for line in sys.stdin:
     if not line: continue
     m = json.loads(line)
     if 'id' not in m: continue
-    method = m.get('method')
-    if method == 'initialize': res = {'protocolVersion': '2024-11-05'}
-    elif method == 'tools/list': res = {'tools': [{'name': n} for n in ('strata_models', 'strata_status', 'strata_install', 'strata_remove')]}
-    else:
-        p = m['params']
-        res = {'structuredContent': call(p['name'], p.get('arguments') or {})}
-    sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result': res}) + '\n'); sys.stdout.flush()
+    p = m['params']
+    res = call(p['name'], p.get('arguments') or {})
+    print(json.dumps({'id': m['id'], 'result': res}), flush=True)
 `;
-writeFileSync(join(control, 'tools', 'strata_mcp.py'), FAKE_INSTALLER);
+writeFileSync(join(control, 'tools', 'installer_worker.py'), FAKE_INSTALLER);
 
 const FAKE_ENGINE = `import os, sys, json, time
 from pathlib import Path

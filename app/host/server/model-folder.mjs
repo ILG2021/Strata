@@ -5,7 +5,7 @@
  *   model library), which the person is told.
  * - The data folder is the person's own choice, so it is written into the settings file Strata Control reads (`data_dir`). Control's
  *   installer accepts a data folder that is that setting, whatever the folder is called; for a folder it has not been told about it wants a
- *   name starting with "Strata" (a rule against an AI tool filling an arbitrary folder, tools/strata_mcp.py check_data_dir).
+ *   name starting with "Strata" (a rule against an AI tool filling an arbitrary folder, tools/installer_worker.py check_data_dir).
  * - The link that makes `<data>/models` and `<data>/Models` one folder is only needed where the file system tells them apart; where it cannot be
  *   made (exFAT, FAT, a network share) the models simply go in `<data>/models`.
  */

@@ -1,4 +1,4 @@
-"""Tencent Hy4-Flash in setup.py and the catalog (tools/strata_mcp.py): the family table, the menu lines, when the family is offered, the download from a configured source (one file,
+"""Tencent Hy4-Flash in setup.py and the catalog (tools/installer_worker.py): the family table, the menu lines, when the family is offered, the download from a configured source (one file,
 parts joined, a source that fails and the next one), the sizes and hashes, the model rows with the fit words, the install plan and the expected files.
 
     python -m pytest tools/test_setup_hy4.py
@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
 import setup  # noqa: E402
-import strata_mcp as M  # noqa: E402
+import installer_worker as M  # noqa: E402
 from strata_control import hy4_family, hy4_fit  # noqa: E402
 
 
@@ -248,8 +248,8 @@ class Offered(unittest.TestCase):
             self.assertEqual(got, out)
             self.assertEqual(seen[0][0][:2], [str(eng), "--export-tokenizer"])
 
-    def test_strata_mcp_install_plan_omits_qwen_drafter_flags_for_hy4(self):
-        # #109 regression: strata_mcp install_plan for hy4-flash must not pass Qwen's --drafter mtp / --mtp
+    def test_installer_worker_install_plan_omits_qwen_drafter_flags_for_hy4(self):
+        # #109 regression: installer_worker install_plan for hy4-flash must not pass Qwen's --drafter mtp / --mtp
         with tempfile.TemporaryDirectory() as d:
             s = M.Strata(Path(d), HERE.parent)
             t = M.Tools(s)

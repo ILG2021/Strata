@@ -1,7 +1,7 @@
 """ARCFIX (0.2.13): the app's model setup on an Intel Arc card (Linux, the SYCL engine).
 
 Found by QAGUI-LIN on an Arc A750: the app's install job ran setup.py with no `--backend`, so setup's NVIDIA / AMD path stopped with "no NVIDIA GPU found
-(nvidia-smi did not answer)". tools/strata_mcp.py now picks `sycl` for an Intel PC and passes `--backend sycl`; setup.py's CONTROL mode answers that with the
+(nvidia-smi did not answer)". tools/installer_worker.py now picks `sycl` for an Intel PC and passes `--backend sycl`; setup.py's CONTROL mode answers that with the
 Terminal's own two steps (the pack, then the run config of strata_cli/launch/adopt.py). NVIDIA and AMD are what they were. Offline: nothing runs but Python."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp as M  # noqa: E402
+import installer_worker as M  # noqa: E402
 from strata_control import intel_app  # noqa: E402
 
 A750 = {"vendor": "intel", "name": "Intel Arc A750", "vram_gb": 8.0, "usable": True, "index": 0}
@@ -172,7 +172,7 @@ class InstallPlan(unittest.TestCase):
         if tools:
             self.assertEqual(tools["strata_install"]["inputSchema"]["properties"]["backend"]["enum"], ["auto", "cuda", "hip", "sycl"])
         else:
-            self.assertIn('"enum": ["auto", "cuda", "hip", "sycl"]', (ROOT / "tools" / "strata_mcp.py").read_text(encoding="utf-8"))
+            self.assertIn('"enum": ["auto", "cuda", "hip", "sycl"]', (ROOT / "tools" / "installer_worker.py").read_text(encoding="utf-8"))
 
 
 class SetupControlMode(unittest.TestCase):

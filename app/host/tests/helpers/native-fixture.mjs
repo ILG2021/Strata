@@ -10,7 +10,7 @@ export function nativeFixture({modelsDirectory,tuneHandler,engineStatus}={}){
  const root=mkdtempSync(join(tmpdir(),'strata-native-test-')),repo=join(root,'repo'),directory=join(root,'data');
  const venvBin=process.platform==='win32'?'.venv/Scripts':'.venv/bin',venvPython=process.platform==='win32'?'.venv/Scripts/python.exe':'.venv/bin/python';
  for(const path of ['tools','serve',venvBin,'engine/.previous'])mkdirSync(join(repo,path),{recursive:true});
- writeFileSync(join(repo,'setup.py'),'# --rollback-engine\n');for(const path of ['tools/strata_mcp.py',venvPython])writeFileSync(join(repo,path),'fixture');
+ writeFileSync(join(repo,'setup.py'),'# --rollback-engine\n');for(const path of ['tools/installer_worker.py',venvPython])writeFileSync(join(repo,path),'fixture');
  writeFileSync(join(repo,'serve/server.py'),NATIVE_FIELDS.map(f=>f.id).join('\n')+'\n/v1/responses');
  const catalog={families:[{family:'qwen',title:'Qwen3.8-Flash-Next',about:'Native fixture',images:true,sizes:[{id:'iq2_xs',model:'IQ2_XS',download_gb:68,ram_needed_gb:48,about:'Compact',on_this_pc:'fits',installed:true},{id:'iq3_s',model:'IQ3_S',download_gb:84,ram_needed_gb:62,about:'Quality',on_this_pc:'fits',installed:true}]}],contexts:[32768,131072],recommendation:{family:'qwen',model:'IQ2_XS',context:32768}};
  const installed={models:['iq2_xs','iq3_s'].map(model=>({model,config:`strata-${model}.json`,model_name:`Qwen ${model}`,context:32768,images:'gpu',ready:true,kv:'int8'})),data_folder:join(root,'Strata-data'),engine:{version:'v0.1.40'}};
@@ -19,13 +19,11 @@ export function nativeFixture({modelsDirectory,tuneHandler,engineStatus}={}){
  const spawnProcess=(command,args,options)=>{
   calls.push({command,args,options});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.exitCode=null;child.kill=()=>{child.exitCode=0;queueMicrotask(()=>child.emit('exit',0));return true;};
   if(tuneHandler&&args.some(a=>String(a).endsWith('strata.py'))){child.kill=()=>{child.exitCode=0;queueMicrotask(()=>{child.emit('exit',0);child.emit('close',null);});return true;};queueMicrotask(()=>tuneHandler(child,args,options));return child;}children.push(child);
-  if(args[0]?.endsWith('strata_mcp.py'))child.stdin={write(line){const message=JSON.parse(line);if(!message.id)return;if(message.method==='tools/call')rpcCalls.push(message.params);let result;
-   if(message.method==='initialize')result={protocolVersion:'2024-11-05'};
-   else if(message.method==='tools/list')result={tools:['strata_models','strata_status','strata_install'].map(name=>({name}))};
-   else if(message.params.name==='strata_models')result={structuredContent:catalog};
+  if(args[0]?.endsWith('installer_worker.py'))child.stdin={write(line){const message=JSON.parse(line);if(!message.id)return;rpcCalls.push(message.params);let result;
+   if(message.params.name==='strata_models')result={structuredContent:catalog};
    else if(message.params.name==='strata_status')result={structuredContent:{installed,hardware,running:external,summary:'Fixture installation',...(engineStatus?{engine:engineStatus}:{})}};
    else result={structuredContent:{summary:'Ready to prepare',plan:{download_gb:68},install:{running:false,exit_code:0}}};
-   queueMicrotask(()=>child.stdout.emit('data',Buffer.from(JSON.stringify({jsonrpc:'2.0',id:message.id,result})+'\n')));
+   queueMicrotask(()=>child.stdout.emit('data',Buffer.from(JSON.stringify({ id: message.id, ...(result.isError ? { error: { message: result.structuredContent.error } } : { result: result.structuredContent }) })+'\n')));
   }};
   else queueMicrotask(()=>{if(command==='git')child.stdout.emit('data',Buffer.from(args[0]==='describe'?'v0.1.40\n':args[0]==='status'?' M local.py\n':'https://github.com/Niko1221/Strata\n'));if(command==='git'||args[0]==='-c'&&!programWait){child.exitCode=0;child.emit('exit',0);}});
   return child;

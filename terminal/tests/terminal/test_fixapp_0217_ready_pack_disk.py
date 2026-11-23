@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import setup  # noqa: E402
-import strata_mcp as M  # noqa: E402
+import installer_worker as M  # noqa: E402
 
 RTX5090 = {"index": 0, "name": "NVIDIA GeForce RTX 5090", "vram_gb": 32.0, "arch": "120", "vendor": "nvidia", "usable": True}
 

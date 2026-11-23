@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp  # noqa: E402
+import installer_worker  # noqa: E402
 from serve import runconfig  # noqa: E402
 from serve.server import engine_args  # noqa: E402
 from strata_control import tune_apply, user_args  # noqa: E402
@@ -217,7 +217,7 @@ class DisplayCards(unittest.TestCase):
 
     def test_nvidia_by_nvidia_smi(self):
         gpus = [{"vendor": "nvidia", "index": 0}, {"vendor": "nvidia", "index": 1}, {"vendor": "nvidia", "index": 2}]
-        strata_mcp.mark_display(gpus, {0: False, 1: True}, [])
+        installer_worker.mark_display(gpus, {0: False, 1: True}, [])
         self.assertIs(gpus[0]["drives_display"], False)
         self.assertIs(gpus[1]["drives_display"], True)
         self.assertNotIn("drives_display", gpus[2])                                        # not told: unknown
@@ -225,30 +225,30 @@ class DisplayCards(unittest.TestCase):
     def test_amd_by_the_windows_adapter_with_a_desktop(self):
         amd = {"vendor": "amd", "index": 1, "pci_id": 0x744C}
         gpus = [{"vendor": "amd", "index": 0, "pci_id": 0x164E}, amd]
-        strata_mcp.mark_display(gpus, {}, ["PCI\\VEN_1002&DEV_164E&SUBSYS_1"])
+        installer_worker.mark_display(gpus, {}, ["PCI\\VEN_1002&DEV_164E&SUBSYS_1"])
         self.assertIs(gpus[0]["drives_display"], True)
         self.assertIs(amd["drives_display"], False)
         twins = [{"vendor": "amd", "pci_id": 0x744C}, {"vendor": "amd", "pci_id": 0x744C}]
-        strata_mcp.mark_display(twins, {}, ["PCI\\VEN_1002&DEV_744C"])
+        installer_worker.mark_display(twins, {}, ["PCI\\VEN_1002&DEV_744C"])
         self.assertNotIn("drives_display", twins[0])                                       # two of one model: not told apart
-        strata_mcp.mark_display(gpus[:1] + [{"vendor": "amd", "pci_id": 0x1}], {}, [])
+        installer_worker.mark_display(gpus[:1] + [{"vendor": "amd", "pci_id": 0x1}], {}, [])
         self.assertTrue(True)
 
     def test_nvidia_windows_display_fallback(self):
         # #4641: When nvidia-smi reports Disabled on Windows, desktop_pnp matching DEV_xxxx marks display True,
         # and an unmatched card is left unknown so the app keeps a safety reserve
         gpus = [{"vendor": "nvidia", "index": 0, "pci_id": 0x2805}, {"vendor": "nvidia", "index": 1, "pci_id": 0x2C02}]
-        strata_mcp.mark_display(gpus, {0: False, 1: False}, ["PCI\\VEN_10DE&DEV_2805&SUBSYS_1"])
+        installer_worker.mark_display(gpus, {0: False, 1: False}, ["PCI\\VEN_10DE&DEV_2805&SUBSYS_1"])
         self.assertIs(gpus[0]["drives_display"], True)
         self.assertNotIn("drives_display", gpus[1])
 
     def test_nvidia_display_active_windows_memory(self):
         # #4641: nvidia_display_active fallback on Windows when memory.used > 400 MiB
-        with unittest.mock.patch.object(strata_mcp, "WIN", True):
-            with unittest.mock.patch.object(strata_mcp, "run_quiet", lambda cmd: "0, Disabled, 850\n1, Disabled, 0\n"):
-                self.assertEqual(strata_mcp.nvidia_display_active(), {0: True, 1: False})
-            with unittest.mock.patch.object(strata_mcp, "run_quiet", lambda cmd: "0, Enabled, 0\n"):
-                self.assertEqual(strata_mcp.nvidia_display_active(), {0: True})
+        with unittest.mock.patch.object(installer_worker, "WIN", True):
+            with unittest.mock.patch.object(installer_worker, "run_quiet", lambda cmd: "0, Disabled, 850\n1, Disabled, 0\n"):
+                self.assertEqual(installer_worker.nvidia_display_active(), {0: True, 1: False})
+            with unittest.mock.patch.object(installer_worker, "run_quiet", lambda cmd: "0, Enabled, 0\n"):
+                self.assertEqual(installer_worker.nvidia_display_active(), {0: True})
 
 
 if __name__ == "__main__":

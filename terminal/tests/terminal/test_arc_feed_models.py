@@ -1,5 +1,5 @@
 """Qwen4 day on an Intel Arc card: a model of the signed feed (strata_control/feed_models.py) gets an Arc run config, in the Terminal (strata_cli/launch/adopt.py,
-runner.adopt_prepared_files) and in the app (setup.py --backend sycl in CONTROL mode, tools/strata_mcp.py's install plan).
+runner.adopt_prepared_files) and in the app (setup.py --backend sycl in CONTROL mode, tools/installer_worker.py's install plan).
 
 Found by the Q4-READY rehearsal on the A750 (11-09): `strata launch` of a feed model stopped with "Strata can write the settings itself only for the Qwen3.8-Flash-Next,
 Swift, Coder and Gyro files, not for q4rehearsal-a", for a model on the Strata engine and for one on its own shape's engine alike. What these tests pin:
@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp as M  # noqa: E402
+import installer_worker as M  # noqa: E402
 from strata_cli.launch import adopt  # noqa: E402
 from strata_control import intel_app, setup_config  # noqa: E402
 
@@ -137,7 +137,7 @@ class AdoptFeedModels(unittest.TestCase):
 
 
 class AppArcPath(unittest.TestCase):
-    """The app: tools/strata_mcp.py plans `--backend sycl` for a feed model on an Arc, and setup.py's CONTROL mode fetches a shape engine, packs and writes the config."""
+    """The app: tools/installer_worker.py plans `--backend sycl` for a feed model on an Arc, and setup.py's CONTROL mode fetches a shape engine, packs and writes the config."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

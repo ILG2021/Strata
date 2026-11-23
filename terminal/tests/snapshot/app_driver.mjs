@@ -1,6 +1,6 @@
 // The app's Load, headless, for the config snapshot.  node app_driver.mjs <world.json> <plain|models>
 //
-// The host's own createNativeControl runs the Load exactly as the app does.  Fake: the installer process (strata_mcp.py: catalog and hardware), Control's
+// The host's own createNativeControl runs the Load exactly as the app does.  Fake: the installer process (installer_worker.py: catalog and hardware), Control's
 // model list, engine package, profile save and start (they record what the host hands over).  Real: Control's `drafting plan` and `drafting fetch`, run
 // through the Python shim on the same simulated machine, with the download replaced by a recorder.  No engine starts, nothing is downloaded, no network.
 import { EventEmitter } from 'node:events';
@@ -63,18 +63,16 @@ const catalog = { families: [{ family, title: info.title, about: 'x', images: tr
   contexts: [8192, 32768, 131072], recommendation: { family, model, context: info.context }, context_note: '' };
 
 const spawnProcess = (command, argv) => {
-  if (!String(argv[0]).endsWith('strata_mcp.py')) throw new Error('no process but the installer may be started in packaged mode: ' + command + ' ' + argv.join(' '));
+  if (!String(argv[0]).endsWith('installer_worker.py')) throw new Error('no process but the installer may be started in packaged mode: ' + command + ' ' + argv.join(' '));
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.exitCode = null;
   child.kill = () => { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); return true; };
   child.stdin = { write(line) {
     const message = JSON.parse(line); if (!message.id) return;
     let result;
-    if (message.method === 'initialize') result = { protocolVersion: '2024-11-05' };
-    else if (message.method === 'tools/list') result = { tools: ['strata_models', 'strata_status', 'strata_install', 'strata_remove'].map(name => ({ name })) };
-    else if (message.params.name === 'strata_models') result = { structuredContent: catalog };
+    if (message.params.name === 'strata_models') result = { structuredContent: catalog };
     else if (message.params.name === 'strata_status') result = { structuredContent: { hardware, recommendation: catalog.recommendation, install: null, running: [], summary: 'x' } };
     else result = { structuredContent: { summary: 'x', install: { running: false, exit_code: 0 } } };
-    queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n')));
+    queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: message.id, result: result.structuredContent }) + '\n')));
   } };
   return child;
 };

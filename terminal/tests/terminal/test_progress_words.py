@@ -1,5 +1,5 @@
 """0.2.2: the words for a model download and its preparation are plain and true (strata_control/progress_words.py), and the app's
-and the Terminal's progress read the same lines the same way (tools/strata_mcp.py install_progress / combined_progress).
+and the Terminal's progress read the same lines the same way (tools/installer_worker.py install_progress / combined_progress).
 
 The excerpts are from real setup logs (Gyro-S on the RTX 5070 PC, 2026-10-19) and from the steps a Q2_0 install adds."""
 
@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-import strata_mcp  # noqa: E402
+import installer_worker  # noqa: E402
 from strata_control import progress_words as W  # noqa: E402
 
 HEAD = ["Strata - Qwen3.8-Flash-Next on a normal PC", "=== Step 1: checking your PC ===", "  [ok] GPU: NVIDIA GeForce RTX 5070",
@@ -27,7 +27,7 @@ STEP6 = ["=== Step 6: preparing the model for Strata ==="]
 
 
 def prog(lines):
-    p = strata_mcp.install_progress(lines)
+    p = installer_worker.install_progress(lines)
     return p, p.get("label"), p.get("phase")
 
 
@@ -156,14 +156,14 @@ class CombinedFigure(unittest.TestCase):
             import os
             with open(part, "r+b") as f:
                 f.truncate(1_000_000_000)
-            out = strata_mcp.files_progress(prog_, {"total_gb": 1.0}, files)
+            out = installer_worker.files_progress(prog_, {"total_gb": 1.0}, files)
             self.assertAlmostEqual(out["download"]["done_gb"], 0.5, places=2)
             self.assertEqual(out["download"]["percent"], 50)
 
     def test_the_hash_check_has_its_own_figure(self):
         lines = HEAD + STEP5 + [CHECK, "  checking Qwen3.8-Flash-Next-Gyro-S-TQ1_0.gguf:  12.00 / 58.49 GB (20%)   "]
-        p = strata_mcp.install_progress(lines)
-        out = strata_mcp.combined_progress(p, {"folder": None, "total_gb": 58.5})
+        p = installer_worker.install_progress(lines)
+        out = installer_worker.combined_progress(p, {"folder": None, "total_gb": 58.5})
         self.assertEqual(out["download"]["file"], "checking files")
         self.assertEqual(out["download"]["percent"], 20)
 
@@ -187,7 +187,7 @@ class CombinedFigure(unittest.TestCase):
             files = self._qwen36_files(Path(tmp), reader_done=False)
             prog_ = {"step": "5/7: downloading Qwen3.6-35B-A3B UD-Q4_K_XL",
                      "download": {"file": "vision encoder", "done_gb": 0.43, "total_gb": 0.9, "percent": 48}}
-            out = strata_mcp.files_progress(prog_, {"total_gb": 22.9}, files)
+            out = installer_worker.files_progress(prog_, {"total_gb": 22.9}, files)
             reader = next(p for p in out["parts"] if p["kind"] == "vision")
             self.assertAlmostEqual(reader["done_gb"], 0.43, places=2)
             self.assertEqual(reader["state"], "downloading")
@@ -201,19 +201,19 @@ class CombinedFigure(unittest.TestCase):
             files = self._qwen36_files(Path(tmp), reader_done=True)
             job = {"folder": tmp, "total_gb": 22.9, "files": files}
             for lines in (HEAD + STEP5 + STEP6, HEAD + STEP5 + STEP6 + ["=== Step 7: writing the start script ==="]):
-                out = strata_mcp.combined_progress(strata_mcp.install_progress(lines), job)
+                out = installer_worker.combined_progress(installer_worker.install_progress(lines), job)
                 self.assertEqual([(p["kind"], p["state"]) for p in out.get("parts", [])], [("model", "done"), ("vision", "done")])
                 self.assertAlmostEqual(sum(p["done_gb"] for p in out["parts"]), 23.753, places=2)
                 self.assertNotIn("download", out)
             # the download step itself, every file in: 100
-            out = strata_mcp.combined_progress(strata_mcp.install_progress(HEAD + STEP5 + ["  [ok] vision encoder downloaded"]), job)
+            out = installer_worker.combined_progress(installer_worker.install_progress(HEAD + STEP5 + ["  [ok] vision encoder downloaded"]), job)
             self.assertEqual(out["download"]["percent"], 100)
             # while a file is still missing the figure stays below 100
             Path(files[1]["path"]).rename(files[1]["path"] + ".part")
-            out = strata_mcp.combined_progress(strata_mcp.install_progress(HEAD + STEP5 + [MODEL_PROGRESS]), job)
+            out = installer_worker.combined_progress(installer_worker.install_progress(HEAD + STEP5 + [MODEL_PROGRESS]), job)
             self.assertLessEqual(out["download"]["percent"], 99)
             # before the download step nothing is counted
-            self.assertNotIn("parts", strata_mcp.combined_progress(strata_mcp.install_progress(HEAD), job))
+            self.assertNotIn("parts", installer_worker.combined_progress(installer_worker.install_progress(HEAD), job))
 
 
 if __name__ == "__main__":

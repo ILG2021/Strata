@@ -1,4 +1,4 @@
-"""The desktop app's installer: tools/strata_mcp.py and setup.py run on Control's Python in STRATA_CONTROL_INSTALL mode.
+"""The desktop app's installer: tools/installer_worker.py and setup.py run on Control's Python in STRATA_CONTROL_INSTALL mode.
 
 What the owner asked for: a user installs the app, picks a model in it and downloads and prepares it, like any normal user.
 What must stay true: a start or a serve never acquires anything (tests/terminal/test_no_acquisition.py), and the install
@@ -175,13 +175,13 @@ class ControlModeTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
         tools = stage.local_imports(ROOT, stage.INSTALLER_TOOLS)
-        for need in ("strata_mcp", "iq_pack", "strata_pack", "canonical_xcheck", "pack_layer", "gguf_reader", "gguf_writer", "_paths",
+        for need in ("installer_worker", "iq_pack", "strata_pack", "canonical_xcheck", "pack_layer", "gguf_reader", "gguf_writer", "_paths",
                      "strata_gguf", "strata_quants", "strata_quant_tables"):
             self.assertIn(need, tools)
         out = Path(self.tmp.name) / "control"
         out.mkdir()
         record = stage.add_installer(out)
-        for name in ("setup.py", "ref/load.py", "tools/strata_mcp.py", "tools/iq_pack.py", "data/draft_vocab.bin"):
+        for name in ("setup.py", "ref/load.py", "tools/installer_worker.py", "tools/iq_pack.py", "data/draft_vocab.bin"):
             self.assertTrue((out / name).is_file(), name)
         self.assertIn("tools/strata_pack.py", record["files"])
         # every module setup.py's preparation steps run exists in the bundle
@@ -190,14 +190,14 @@ class ControlModeTests(unittest.TestCase):
 
 
 class InstallerServerTests(unittest.TestCase):
-    """tools/strata_mcp.py with its source (setup.py, serve/) apart from the install folder, as the app runs it."""
+    """tools/installer_worker.py with its source (setup.py, serve/) apart from the install folder, as the app runs it."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "install"
         self.root.mkdir()
-        spec = importlib.util.spec_from_file_location("strata_mcp_for_test", ROOT / "tools" / "strata_mcp.py")
+        spec = importlib.util.spec_from_file_location("installer_worker_for_test", ROOT / "tools" / "installer_worker.py")
         self.mcp = importlib.util.module_from_spec(spec)
         with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(self.root)}):
             spec.loader.exec_module(self.mcp)
@@ -458,12 +458,12 @@ class DeleteModelTests(unittest.TestCase):
         self.root = base / "install"
         self.root.mkdir()
         self.data = base / "Strata-data"
-        # The data folder Control may delete from is the one the settings file names (strata_mcp.Strata.data_dir): without this a PC that has its own settings
+        # The data folder Control may delete from is the one the settings file names (installer_worker.Strata.data_dir): without this a PC that has its own settings
         # file (Windows: %APPDATA%\Strata\settings.json, the person's data_dir) made every folder of this test's fake data "outside Strata's folders".
         isolated = mock.patch.dict(os.environ, {"STRATA_SETTINGS_FILE": str(base / "no-settings.json")})
         isolated.start()
         self.addCleanup(isolated.stop)
-        spec = importlib.util.spec_from_file_location("strata_mcp_for_delete", ROOT / "tools" / "strata_mcp.py")
+        spec = importlib.util.spec_from_file_location("installer_worker_for_delete", ROOT / "tools" / "installer_worker.py")
         self.mcp = importlib.util.module_from_spec(spec)
         with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(self.root)}):
             spec.loader.exec_module(self.mcp)
@@ -609,7 +609,7 @@ class LocalGgufInstallTests(unittest.TestCase):
             root.mkdir()
             local = Path(tmp) / "mine"
             local.mkdir()
-            spec = importlib.util.spec_from_file_location("strata_mcp_for_local", ROOT / "tools" / "strata_mcp.py")
+            spec = importlib.util.spec_from_file_location("installer_worker_for_local", ROOT / "tools" / "installer_worker.py")
             mcp = importlib.util.module_from_spec(spec)
             with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(root)}):
                 spec.loader.exec_module(mcp)

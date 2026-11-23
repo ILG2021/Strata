@@ -84,7 +84,7 @@ class EveryEntryPointHasTheGuard(unittest.TestCase):
     def test_the_list_is_not_empty_and_has_the_known_entries(self):
         files = shipped_entry_files()
         for must in ("strata.py", "setup.py", "serve/server.py", "strata_control/runtime.py", "strata_control/__init__.py", "serve/__init__.py",
-                     "strata_cli/__init__.py", "tools/strata_mcp.py", "strata_control/management.py"):
+                     "strata_cli/__init__.py", "tools/installer_worker.py", "strata_control/management.py"):
             self.assertIn(must, files)
         for rel in files:
             self.assertTrue((ROOT / rel).is_file(), rel)
@@ -218,7 +218,7 @@ class FreshProcessesNeverLoadWmi(unittest.TestCase):
     #: importable without starting anything (a module with a heavy or interactive import side effect is left to the static check)
     MODULES = ("strata_control", "serve", "strata_cli", "strata_control.runtime", "strata_control.management", "strata_control.pictures",
                "strata_control.app_policy", "strata_control.tls", "strata_control.sysinfo", "serve.server", "serve.cpu_affinity",
-               "setup", "tools.strata_mcp", "tools.mtp_fetch", "tools.strata_tokenizer")
+               "setup", "tools.installer_worker", "tools.mtp_fetch", "tools.strata_tokenizer")
 
     def test_import_each_entry_in_a_fresh_process(self):
         env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "STRATA_DIAG_LOG")}

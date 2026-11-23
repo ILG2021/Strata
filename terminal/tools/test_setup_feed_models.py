@@ -402,10 +402,10 @@ class RefusalsAndOffline(Base):
 
 
 class TerminalAndApp(Base):
-    """strata_mcp is the app's and the Terminal's one catalog."""
+    """installer_worker is the app's and the Terminal's one catalog."""
 
     def table(self, ram=64.0):
-        import strata_mcp as M
+        import installer_worker as M
         s = M.Strata(ROOT)
         # the PC these tests describe, not the box they run on (p1006's real Arc card sent install_plan down the Intel path)
         s._hardware = lambda: {"os": "TestOS 1", "ram_gb": ram, "cpu": {"name": "Fake CPU", "cores": 12, "avx2": True, "avx512": False},
@@ -432,7 +432,7 @@ class TerminalAndApp(Base):
         self.assertEqual(by["later-one"]["sizes"], [])                                   # the app hides a family without sizes
         self.assertFalse(by["later-one"]["available"])
         self.assertEqual(by["later-one"]["unavailable_reason"], feed_models.UNAVAILABLE_UNKNOWN)
-        import strata_mcp as M
+        import installer_worker as M
         plan, args = M.Tools(s).install_plan("qwen4-test", "Q4_K_M", 65536, "no", None, None, None, None, "auto", None, None)
         self.assertEqual(args[args.index("--family") + 1:args.index("--family") + 4:2], ["qwen4-test", "Q4_K_M"])        # the install runs setup with the feed model's names
         self.assertEqual(plan["download_gb"], 0.0)
@@ -528,7 +528,7 @@ class MacTables(Base):
 
     def test_the_mac_table_lists_it_after_the_built_in_sizes(self):
         feed_models.load(self.signed_feed("f", 7, [flash_next()]), trusted={self.key["key_id"]: base64.b64decode(self.key["public"])})
-        import strata_mcp as M
+        import installer_worker as M
         rows = M.Strata(ROOT).model_table({"ram_gb": 64.0, "gpus": [], "mac": {"chip": "M4", "unified_gb": 64}})
         by = {r["family"]: r for r in rows}
         self.assertTrue(by["qwen4-test"]["feed"])

@@ -1,6 +1,6 @@
 """The Mac's model rules: which packs a Mac can run, whether one stays resident or streams its experts from the SSD, the
 Metal defaults of a run config. ONE definition, read by metal/setup_mac.py (a Mac that builds the engine itself), by setup.py's
-Control mode (the app and the Terminal on a Mac: model files only, the engine is a component) and by tools/strata_mcp.py (the
+Control mode (the app and the Terminal on a Mac: model files only, the engine is a component) and by tools/installer_worker.py (the
 model list, the fit words and the recommendation both show). Pure: nothing here downloads, builds or starts anything.
 
 Unified memory: a Mac has one pool. Metal keeps a share of it resident (GPU_SHARE; on a big Mac the memory less what macOS and

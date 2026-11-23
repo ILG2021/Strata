@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""tools/strata_mcp.py - an MCP server that lets an AI assistant install, start, check and stop Strata.
-
-    claude mcp add strata -- python /path/to/Strata/tools/strata_mcp.py
-
-Add it to Claude Code, Claude Desktop, Cursor, VS Code, Codex ... (docs/MCP_SERVER.md has every client's snippet) and
-ask your AI "install Strata for this PC", "start Strata", "is Strata running?".  It speaks MCP (JSON-RPC 2.0, one
-message per line) over stdin/stdout, uses the Python standard library only (it runs before setup made .venv; Python
-3.10 or newer), and offers a fixed set of tools: strata_status, strata_models, strata_install, strata_start,
-strata_stop, strata_logs, strata_benchmark, strata_connect_info.
-
-Safety: no tool takes a shell command or a free path.  Every argument is checked against setup.py's own choices
-(models, families, contexts ...); the only path argument (install's data_dir) must be the Strata data folder, a folder
-inside the Strata folder, or a new folder named Strata* outside the system folders.  Setup and the model run as
-background processes this server starts itself; it keeps their process id and start time in .strata-mcp/ and only
-ever stops a process it started (a Strata started elsewhere, e.g. from its own window, is only asked over its API to
-unload the model).
-
-Not to be confused with serve/mcp.py: that is Strata's MCP *client* (the model calling your tools from the chat page).
-This file is an MCP *server* for the AI assistant you already use.
-"""
+"""Local installer operations shared by the desktop app and Terminal."""
 from __future__ import annotations
 import sys
 if sys.platform == "win32":
@@ -44,19 +25,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROTOCOL = "2025-06-18"
-PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")   # the revisions this server answers in
-VERSION = "0.1.0"
 WIN = os.name == "nt"
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 # The desktop app runs this under Strata Control's Python (STRATA_CONTROL_INSTALL=1): the install runs on that Python, makes no
 # .venv and installs no package (setup.py's own CONTROL mode).
 CONTROL = os.environ.get("STRATA_CONTROL_INSTALL") == "1"
 DEFAULT_PORT = 8080
-STATE_DIR = ".strata-mcp"                             # in the Strata folder (git-ignored)
+STATE_DIR = ".strata-mcp"                             # Keep existing install-job records across upgrades.
 
 # What setup.py offers, used only when setup.py cannot be imported (the numbers are setup's MODELS / FAMILIES /
-# CONTEXTS; tools/test_strata_mcp.py checks they still match).
+# CONTEXTS; tools/test_installer_worker.py checks they still match).
 FALLBACK_MODELS = {
     "Q2_0": {"about": "2-bit, the fastest", "download_gb": 66.4, "ram_gb": 48, "arena_gb": 34.0, "families": ("qwen",)},
     "IQ2_XS": {"about": "2-bit i-quant, a little better quality, close in speed", "download_gb": 68.0, "ram_gb": 48,
@@ -183,7 +161,7 @@ def ready_pack_dir(target, md) -> "Path | None":
 def log(msg: str) -> None:
     """Diagnostics go to stderr: stdout carries only the protocol."""
     try:
-        sys.stderr.write(f"[strata-mcp] {msg}\n")
+        sys.stderr.write(f"[strata-installer] {msg}\n")
         sys.stderr.flush()
     except (OSError, ValueError):
         pass
@@ -597,7 +575,7 @@ class Strata:
             try:
                 if str(self.src) not in sys.path:
                     sys.path.insert(0, str(self.src))   # setup.py imports strata_control
-                spec = importlib.util.spec_from_file_location("strata_setup_for_mcp", self.src / "setup.py")
+                spec = importlib.util.spec_from_file_location("strata_setup_for_installer", self.src / "setup.py")
                 mod = importlib.util.module_from_spec(spec)
                 real = sys.stdout
                 sys.stdout = sys.stderr                 # nothing it prints may reach the protocol stream
@@ -1696,7 +1674,7 @@ class Strata:
         return info
 
     def tracked_server(self) -> dict | None:
-        """The server this MCP server started, while it still runs (else its record is cleared)."""
+        """The server this installer started, while it still runs (else its record is cleared)."""
         s = self.state("server")
         if not s:
             return None
@@ -2320,7 +2298,7 @@ class Tools:
         if tracked and not tracked.get("ended"):
             mine = next((x for x in running if x["port"] == tracked["port"]), None)
             if mine:
-                mine["started_by"] = f"this MCP server (pid {tracked['pid']})"
+                mine["started_by"] = f"this installer (pid {tracked['pid']})"
             else:
                 out["loading"] = {"model": tracked.get("model"), "port": tracked["port"], "pid": tracked["pid"],
                                   "since": tracked.get("started"),
@@ -2329,7 +2307,7 @@ class Tools:
             out["last_start"] = {"model": tracked.get("model"), "ended": True,
                                  "last_log_lines": read_tail(Path(tracked.get("log", "")), 6)}
         for x in running:
-            x.setdefault("started_by", "outside this MCP server (its own window, a start script or a service)")
+            x.setdefault("started_by", "outside this installer (its own window, a start script or a service)")
         out["running"] = running
         others = [x for x in servers if x.get("other")]
         if others:
@@ -2668,7 +2646,7 @@ class Tools:
         job_id = f"{int(time.time())}-{os.getpid()}"
         log_path = s.state_dir / "setup.log"
         with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"\n===== strata-mcp: install {plan['title']} at {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+            f.write(f"\n===== strata-installer: install {plan['title']} at {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
         spec = {"job": job_id, "root": str(s.root), "src": str(s.src), "control": CONTROL,
                 "python": s.run_python(), "base_python": sys.executable,
                 "create_venv": s.python_override is None and not s.venv_python().exists(),
@@ -2716,14 +2694,14 @@ class Tools:
             if tracked and not tracked.get("ended"):
                 info = s.probe(tracked["port"])
                 return {"summary": f"Strata is already {'running' if info else 'loading'} ({tracked.get('model')}, "
-                                   f"port {tracked['port']}, started by this MCP server)"
+                                   f"port {tracked['port']}, started by this installer)"
                                    + ("" if tracked.get("model") == desc["model"] else
                                       ": stop it first (strata_stop) to start another model"),
                         "server": info}
             info = s.probe(port, deep=False)
             if info and not info.get("other"):
                 return {"summary": f"a Strata server already runs on port {port} ({info.get('model')}), started "
-                                   "outside this MCP server; stop it (close its window) or use another port",
+                                   "outside this installer; stop it (close its window) or use another port",
                         "server": info}
             if info or not port_free(port):
                 raise ToolError(f"port {port} is used by another program; choose another port (port=...)")
@@ -2737,7 +2715,7 @@ class Tools:
             log_path = s.state_dir / "server.log"
             s.state_dir.mkdir(parents=True, exist_ok=True)
             with open(log_path, "a", encoding="utf-8") as f:
-                f.write(f"\n===== strata-mcp: start {desc['model']} on port {port} at "
+                f.write(f"\n===== strata-installer: start {desc['model']} on port {port} at "
                         f"{time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
             try:
@@ -2818,9 +2796,9 @@ class Tools:
                     if st == 409:
                         raise ToolError("Strata is busy (a request is running); try again when it is done")
                     if st == 401:
-                        raise ToolError("Strata (started outside this MCP server) wants an API key this folder's "
+                        raise ToolError("Strata (started outside this installer) wants an API key this folder's "
                                         "configs do not have; close its window to stop it")
-                    return {"summary": f"Strata on port {p} was started outside this MCP server (its own window or a "
+                    return {"summary": f"Strata on port {p} was started outside this installer (its own window or a "
                                        f"service), so only its model was unloaded ({r}): its VRAM and RAM are free, "
                                        "but the server still listens and loads the model again on the next request. "
                                        "Close its window to end it completely.",
@@ -2939,117 +2917,56 @@ class Tools:
                              "--host 0.0.0.0 --api-key <secret> (docs/DETAILS.md, 'Using it')"}
 
 
-# ------------------------------------------------------------------------------------------------ MCP over stdio
-INSTRUCTIONS = ("Strata runs a large AI model (Qwen3.8-Flash-Next, a mixture of experts) locally on this PC's GPU and "
-                "RAM, with an OpenAI- and Anthropic-compatible server on http://127.0.0.1:8080. Call strata_status "
-                "first. To install: strata_install (it returns a plan; get the user's OK for the 58-111 GB download, "
-                "then call it with confirm=true; it runs in the background - call it again for progress). Then "
-                "strata_start, strata_stop, strata_logs for problems, strata_connect_info to point other apps at it.")
+# ------------------------------------------------------------------------------------------------ installer worker over stdio
+class InstallerWorker:
+    """The desktop Host's private JSON-lines interface on inherited pipes."""
 
+    operations = frozenset({"strata_status", "strata_models", "strata_install", "strata_remove"})
 
-class McpServer:
-    def __init__(self, strata: Strata, out=None):
-        self.strata = strata
+    def __init__(self, strata: Strata, out):
         self.tools = Tools(strata)
         self.out = out
         self.write_lock = threading.Lock()
-        self.protocol = PROTOCOL
 
-    def send(self, msg: dict) -> None:
-        data = (json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8")
+    def handle(self, message) -> dict:
+        if not isinstance(message, dict) or type(message.get("id")) is not int:
+            return {"id": None, "error": {"message": "invalid installer request"}}
+        rid = message["id"]
+        if message.keys() != {"id", "params"}:
+            return {"id": rid, "error": {"message": "invalid installer request"}}
+        params = message.get("params")
+        name = params.get("name") if isinstance(params, dict) else None
+        if not isinstance(name, str) or name not in self.operations:
+            return {"id": rid, "error": {"message": f"unknown installer operation: {name}"}}
+        try:
+            return {"id": rid, "result": self.tools.call(name, params.get("arguments"))}
+        except ToolError as error:
+            return {"id": rid, "error": {"message": str(error)}}
+        except Exception as error:
+            log("installer operation failed:\n" + traceback.format_exc())
+            return {"id": rid, "error": {"message": f"internal error in {name}: {error}"}}
+
+    def serve(self, inp) -> None:
+        threads = []
+        for line in inp:
+            if not line.strip():
+                continue
+            thread = threading.Thread(target=self.respond, args=(line,), daemon=True)
+            thread.start()
+            threads = [active for active in threads if active.is_alive()]
+            threads.append(thread)
+        for thread in threads:
+            thread.join(timeout=5)
+
+    def respond(self, line) -> None:
+        try:
+            response = self.handle(json.loads(line))
+        except ValueError:
+            response = {"id": None, "error": {"message": "invalid installer JSON"}}
+        data = (json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8")
         with self.write_lock:
             self.out.write(data)
             self.out.flush()
-
-    @staticmethod
-    def result(rid, result):
-        return {"jsonrpc": "2.0", "id": rid, "result": result}
-
-    @staticmethod
-    def error(rid, code, message):
-        return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}}
-
-    def handle(self, msg) -> dict | None:
-        """One JSON-RPC message -> its response (None for a notification or a response)."""
-        if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0":
-            return self.error(msg.get("id") if isinstance(msg, dict) else None, -32600, "invalid request")
-        if "method" not in msg:
-            return None                                 # a response to something we never ask: ignored
-        method, rid, params = msg["method"], msg.get("id"), msg.get("params") or {}
-        if "id" not in msg:
-            return None                                 # notifications (initialized, cancelled ...): nothing to say
-        if not isinstance(params, dict):
-            return self.error(rid, -32602, "params must be an object")
-        if method == "initialize":
-            asked = str(params.get("protocolVersion") or PROTOCOL)
-            self.protocol = asked if asked in PROTOCOLS else PROTOCOL
-            return self.result(rid, {"protocolVersion": self.protocol,
-                                     "capabilities": {"tools": {"listChanged": False}},
-                                     "serverInfo": {"name": "strata", "title": "Strata", "version": VERSION},
-                                     "instructions": INSTRUCTIONS})
-        if method == "ping":
-            return self.result(rid, {})
-        if method == "tools/list":
-            return self.result(rid, {"tools": self.tools.defs()})
-        if method == "tools/call":
-            name = params.get("name")
-            try:
-                res = self.tools.call(name, params.get("arguments"))
-                return self.result(rid, self.content(res, error=False))
-            except KeyError:
-                return self.error(rid, -32602, f"unknown tool: {name}")
-            except ToolError as e:
-                return self.result(rid, self.content({"error": str(e)}, error=True))
-            except Exception as e:                      # noqa: BLE001 - a bug must not end the server
-                log("tool failed:\n" + traceback.format_exc())
-                return self.result(rid, self.content({"error": f"internal error in {name}: {e}"}, error=True))
-        if method in ("resources/list", "prompts/list"):
-            return self.result(rid, {method.split("/")[0]: []})
-        return self.error(rid, -32601, f"method not found: {method}")
-
-    def content(self, res: dict, error: bool) -> dict:
-        text = json.dumps(res, indent=1, ensure_ascii=False)
-        out = {"content": [{"type": "text", "text": text}], "isError": error}
-        if self.protocol >= "2025-06-18":
-            out["structuredContent"] = res
-        return out
-
-    def serve(self, inp) -> None:
-        """Read JSON-RPC lines until stdin closes; tool calls run in their own threads (a start waits for the model
-        while pings and status calls are still answered)."""
-        threads = []
-        for raw in inp:
-            line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else raw.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except ValueError:
-                self.send(self.error(None, -32700, "parse error"))
-                continue
-            batch = isinstance(msg, list)
-            if batch or (isinstance(msg, dict) and msg.get("method") == "tools/call"):
-                t = threading.Thread(target=self._run, args=(msg,), daemon=True)
-                t.start()
-                threads.append(t)
-                threads = [x for x in threads if x.is_alive()]
-            else:
-                self._run(msg)
-        for t in threads:
-            t.join(timeout=5)
-
-    def _run(self, msg) -> None:
-        if isinstance(msg, list):
-            out = [r for r in (self.handle(m) for m in msg) if r is not None]
-            if out:
-                data = (json.dumps(out, ensure_ascii=False) + "\n").encode("utf-8")
-                with self.write_lock:
-                    self.out.write(data)
-                    self.out.flush()
-            return
-        r = self.handle(msg)
-        if r is not None:
-            self.send(r)
 
 
 # ------------------------------------------------------------------------------------------------ the install job
@@ -3075,10 +2992,10 @@ def install_job(spec_path: str) -> int:
         if spec.get("create_venv"):
             venv = root / ".venv"
             if py.exists() and subprocess.run([str(py), "-m", "pip", "--version"], capture_output=True).returncode:
-                print("strata-mcp: .venv has no pip (an earlier run stopped half-way): making it again", flush=True)
+                print("strata-installer: .venv has no pip (an earlier run stopped half-way): making it again", flush=True)
                 shutil.rmtree(venv, ignore_errors=True)
             if not py.exists():
-                print(f"strata-mcp: creating Strata's Python environment in {venv} ...", flush=True)
+                print(f"strata-installer: creating Strata's Python environment in {venv} ...", flush=True)
                 r = subprocess.run([spec["base_python"], "-m", "venv", str(venv)])
                 if r.returncode or not py.exists():
                     print("\n  [X]  could not create the Python environment (.venv)", flush=True)
@@ -3087,7 +3004,7 @@ def install_job(spec_path: str) -> int:
                     record(exit_code=1, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
                     return 1
         cmd = [str(py), str(src / "setup.py"), *spec["args"]]
-        print("strata-mcp: running " + " ".join(cmd), flush=True)
+        print("strata-installer: running " + " ".join(cmd), flush=True)
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
         if spec.get("control"):                         # the app: the installer's own mode, writing to `root`
             env.update(STRATA_CONTROL_INSTALL="1", STRATA_INSTALL_DIR=str(root), PYTHONNOUSERSITE="1")
@@ -3103,20 +3020,22 @@ def install_job(spec_path: str) -> int:
     except Exception as e:                              # noqa: BLE001
         print(f"\n  [X]  strata-mcp could not run setup: {e}", flush=True)
         rc = 1
-    print(f"strata-mcp: setup ended with exit code {rc}", flush=True)
+    print(f"strata-installer: setup ended with exit code {rc}", flush=True)
     record(exit_code=rc, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
     return rc
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Strata's MCP server (stdio): install, start, check and stop Strata "
-                                             "from an AI assistant. See docs/MCP_SERVER.md.")
+    ap = argparse.ArgumentParser(description="Strata local installer worker")
+    ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--root", help="the Strata folder (default: the one this file is in)")
     ap.add_argument("--src", help="where setup.py, tools/ and serve/ are, when that is not the Strata folder (the app)")
     ap.add_argument("--install-job", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     if a.install_job:
         return install_job(a.install_job)
+    if not a.worker:
+        ap.error("this program is started internally by Strata")
     if sys.version_info < (3, 10):
         log("Python 3.10 or newer is needed")
         return 2
@@ -3127,10 +3046,10 @@ def main(argv=None) -> int:
         return 2
     out = sys.stdout.buffer
     sys.stdout = sys.stderr                             # stray prints must never corrupt the protocol stream
-    server = McpServer(Strata(root, src), out)
+    worker = InstallerWorker(Strata(root, src), out)
     log(f"ready (Strata folder {root})")
     try:
-        server.serve(sys.stdin.buffer)
+        worker.serve(sys.stdin.buffer)
     except KeyboardInterrupt:
         pass
     return 0

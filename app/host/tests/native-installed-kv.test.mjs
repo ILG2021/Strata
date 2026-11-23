@@ -22,8 +22,7 @@ async function installedKv(config,{family='swift',listed=true}={}){
   const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.exitCode=null;
   child.kill=()=>{child.exitCode=0;queueMicrotask(()=>child.emit('exit',0));return true;};
   child.stdin={write(line){const m=JSON.parse(line);if(!m.id)return;calls.push(m);
-   const result=m.method==='initialize'?{}:m.method==='tools/list'?{tools:['strata_models','strata_status'].map(name=>({name}))}:
-    {structuredContent:m.params.name==='strata_models'?{families:listed?[{family,sizes:[{id:'swift-iq2_xs',model:'IQ2_XS'}]}]:[]}:{hardware:{ram_gb:64,gpus:[]}}};
+   const result=m.params.name==='strata_models'?{families:listed?[{family,sizes:[{id:'swift-iq2_xs',model:'IQ2_XS'}]}]:[]}:{hardware:{ram_gb:64,gpus:[]}};
    queueMicrotask(()=>child.stdout.emit('data',Buffer.from(JSON.stringify({id:m.id,result})+'\n')));
   }};return child;
  };
@@ -33,7 +32,7 @@ async function installedKv(config,{family='swift',listed=true}={}){
   assert.equal(state.available,true,state.error);
   assert.equal(state.packaged,true);
   assert.deepEqual(state.instances,[]);assert.deepEqual(state.jobs,[]);
-  assert.deepEqual(calls.filter(c=>c.method==='tools/call').map(c=>c.params.name),['strata_status','strata_models']);
+  assert.deepEqual(calls.map(c=>c.params.name),['strata_status','strata_models']);
   assert.equal(readFileSync(path,'utf8'),original,'metadata reads preserve the saved config');
   assert.deepEqual(readdirSync(install),['strata-swift-iq2_xs.json'],'no config backup or rewrite');
   return JSON.parse(JSON.stringify(state.installed.models[0]));

@@ -1,6 +1,6 @@
 """The model catalog, the computer's figures and the fit words for `strata launch`.
 
-There is ONE catalog: setup.py's MODELS / FAMILIES / CONTEXTS, which the desktop app reads through tools/strata_mcp.py
+There is ONE catalog: setup.py's MODELS / FAMILIES / CONTEXTS, which the desktop app reads through tools/installer_worker.py
 (`Strata.model_table`, `Strata.hardware`, `Strata.recommend`; the app page's own fit arithmetic is
 app/host/src/lib/native-fit.ts `fitOn`). This module loads that same file from the installer folder and ports `fitOn` line by
 line; it holds no table of its own. Without the installer files (a Terminal bundle made before launch existed) it says so in
@@ -39,7 +39,7 @@ def _merge_families(cat: Any, families: dict) -> dict:
 
 
 class CatalogUnavailable(RuntimeError):
-    """The installer files (setup.py, tools/strata_mcp.py) are not there; the message is for the user."""
+    """The installer files (setup.py, tools/installer_worker.py) are not there; the message is for the user."""
 
 
 # --- app/host/src/lib/native-fit.ts, ported (same constants, same rules) ------------------------------------------------
@@ -83,7 +83,7 @@ DISK_ROOM_GB = 8.0               # working room beside the download (the Folder 
 
 
 def verdict(on_this_pc: str | None) -> tuple[str, str]:
-    """(category, plain words) from the catalog's own `on_this_pc` text (strata_control/fit_label.py through strata_mcp: "fits" or "may run slower").
+    """(category, plain words) from the catalog's own `on_this_pc` text (strata_control/fit_label.py through installer_worker: "fits" or "may run slower").
 
     No card and a Mac with little memory get "may run slower" too (owner 11-08); an older Control's "does not fit..." is read the same way.  Never a block: the person can always try, and the screen says so."""
     text = (on_this_pc or "").strip()
@@ -342,25 +342,25 @@ def intel_arc_cards(root: str = "/sys/class/drm") -> list[dict]:
 
 
 class Catalog:
-    """setup.py's tables through strata_mcp's `Strata` object (the app's own catalog code)."""
+    """setup.py's tables through installer_worker's `Strata` object (the app's own catalog code)."""
 
     def __init__(self, src: str | os.PathLike | None = None, root: str | os.PathLike | None = None,
                  hardware: dict | None = None):
         self.src = installer_folder(src)
         self.places = install_places(root, self.src)
         self.root = Path(root) if root else (self.places[0].path if self.places else install_root(None, self.src))
-        mcp = self.src / "tools" / "strata_mcp.py"
-        if not mcp.is_file() or not (self.src / "setup.py").is_file():
+        worker = self.src / "tools" / "installer_worker.py"
+        if not worker.is_file() or not (self.src / "setup.py").is_file():
             raise CatalogUnavailable(
                 "This Terminal does not carry the model list. Install it again with the one-line installer, "
                 "or run `strata launch` from a full Strata folder (the folder with setup.py).")
         self.root.mkdir(parents=True, exist_ok=True)
-        name = "strata_mcp_for_launch"
+        name = "installer_worker_for_launch"
         mod = sys.modules.get(name)
         if mod is None:
             if str(self.src) not in sys.path:
                 sys.path.insert(0, str(self.src))
-            spec = importlib.util.spec_from_file_location(name, mcp)
+            spec = importlib.util.spec_from_file_location(name, worker)
             mod = importlib.util.module_from_spec(spec)
             sys.modules[name] = mod
             real = sys.stdout
@@ -369,9 +369,9 @@ class Catalog:
                 spec.loader.exec_module(mod)
             finally:
                 sys.stdout = real
-        self.mcp = mod
+        self.worker = mod
         self.strata = mod.Strata(self.root, self.src)
-        self._mcp_data_dir = self.strata.data_dir
+        self._installer_data_dir = self.strata.data_dir
         self.strata.data_dir = self.data_dir          # one answer to "where is the data folder" for every caller, the app's included
         self._hardware_override = hardware
 
@@ -754,7 +754,7 @@ class Catalog:
         """(the data folder, where it came from): the person's own setting, the desktop app's folder, a Documents/Strata that holds models,
         else the default beside the install. The same rule for every command."""
         from strata_control import discovery
-        return discovery.data_dir(Path(self._mcp_data_dir()))
+        return discovery.data_dir(Path(self._installer_data_dir()))
 
     def data_dir(self) -> Path:
         return self.data_dir_choice()[0]
