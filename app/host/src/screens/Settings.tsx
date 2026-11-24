@@ -15,6 +15,7 @@ import { LANGUAGES } from '../lib/i18n';
 import { setLanguage, setWhileBusy } from '../lib/store';
 import { UserRulesSetting } from '../components/UserRules';
 import { SystemPromptSetting } from '../components/SystemPrompt';
+import { OfflineModeSetting } from '../components/OfflineMode';
 import { CONTENT_FONT_RANGE, setContentFontSize, setDensity, setReplyWidth, setFocus, setMotion, setShortcuts, setTheme, setTransparency, setUiScale, UI_SCALES, useStore, setSettingsSection } from '../lib/store';
 const PANELS = [{ name: 'Appearance', icon: 'sun', sections: ['General', 'Reading & focus'] }, { name: 'Storage', icon: 'disk', sections: ['Storage'] }, { name: 'Engine', icon: 'engine', sections: [] }, { name: 'About', icon: 'info', sections: ['About', 'Update', 'Privacy'] }] as const;
 export function SettingsScreen() {
@@ -39,6 +40,7 @@ export function SettingsScreen() {
         { section: 'General', label: 'Your rules', hint: 'Rules the assistant follows in every chat, for example "Answer in German" or "Keep answers short". New answers use them right away.', aliases: 'instructions agents.md custom global always', control: <UserRulesSetting /> },
         { section: 'General', label: 'Electricity price', hint: 'Price of one kilowatt-hour. The Monitor then shows what your graphics card has cost since Strata started. Leave it empty to hide the cost.', aliases: 'cost power energy kwh currency money', control: <ElectricityPrice /> },
         { section: 'General', label: 'New chats', hint: 'What every new conversation starts with: how much it may do on its own, how deeply it thinks, and how long one answer may be. A conversation you are already in keeps its own choice.', aliases: 'default thinking reasoning effort budget tokens limit', control: <ChatDefaultsSetting /> },
+        { section: 'Privacy', label: 'Offline mode', hint: 'Strata itself connects to nothing outside this computer: no downloads and no update checks. Sharing and the Cloudflare tunnel stay under your control. Downloads that are already running are not stopped.', aliases: 'offline network internet privacy download local', control: <OfflineModeSetting /> },
         { section: 'Reading & focus', label: 'Font', hint: 'Choose an installed font for the interface and conversations.', control: <FontChoice /> },
         { section: 'General', label: 'Keyboard shortcuts', hint: 'Set the key combinations that feel natural to you.', aliases: 'command keys hotkeys', control: <Btn size="sm" onClick={() => setShortcuts(true)}>{tr("Edit shortcuts")}</Btn> },
         { section: 'Reading & focus', label: 'Appearance', hint: 'System follows your computer by default.', aliases: 'theme light dark system automatic', control: <Select value={prefs.theme} ariaLabel={tr("Appearance")} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'system', label: 'System' }]} onChange={setTheme}/> },

@@ -63,6 +63,8 @@ import { appVersionFrom, appVersionToShow } from './app-version.mjs';
 import { createImageModels } from './image-models.mjs';
 import { createRuntimeModels } from './runtime-models.mjs';
 import { createNativeControl } from './native-control.mjs';
+import { contentSecurityPolicy, foreignApiRequest, hostAllowed } from './request-guard.mjs';
+import { OFFLINE_ON, readOffline, writeOffline } from './network-mode.mjs';
 import { nativeUnloadPlan } from './storage-check.mjs';
 import { installBundledEngine, cleanupAfterInstall } from './bundled-engine.mjs';
 import { systemLocale } from './region.mjs';
@@ -159,7 +161,7 @@ if (control) {
     return answer && !answer.usable && bundledWrongMake ? { ...answer, notice: bundledWrongMake, wrongMake: true } : answer;
   };
 }
-const native=createNativeControl({control,ready:bundledEngine,appUpdater,hardwareProbe:()=>(hardware.cachedHardware()?.gpus??[]).map((g,n)=>({index:g.index??n,vram_gb:g.vramGb})),directory:store.DATA_DIR,modelsDirectory:()=>store.MODELS_DIR,nativeDataDirectory:store.nativeDataDirectory,beforeLoad:async()=>{if(models.REAL&&models.library().loaded){if(serving.state().requests.some(r=>runtimeModels.state().instances.some(i=>i.id===r.instanceId)&&["queued","generating"].includes(r.state)))throw new Error("Finish requests before switching engines.");await models.unload();runtimeState();}},requests:()=>serving.state().requests,changed:value=>hub.send('native',value)});
+const native=createNativeControl({control,ready:bundledEngine,appUpdater,implicitDownloads:false,offline:()=>readOffline(componentsDirectory()),hardwareProbe:()=>(hardware.cachedHardware()?.gpus??[]).map((g,n)=>({index:g.index??n,vram_gb:g.vramGb})),directory:store.DATA_DIR,modelsDirectory:()=>store.MODELS_DIR,nativeDataDirectory:store.nativeDataDirectory,beforeLoad:async()=>{if(models.REAL&&models.library().loaded){if(serving.state().requests.some(r=>runtimeModels.state().instances.some(i=>i.id===r.instanceId)&&["queued","generating"].includes(r.state)))throw new Error("Finish requests before switching engines.");await models.unload();runtimeState();}},requests:()=>serving.state().requests,changed:value=>hub.send('native',value)});
 let storageChanging = false;
 let modelOperations = 0;
 const requestQueue = new RequestQueue(n => monitor.queueWaiting(n));
@@ -724,9 +726,14 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname;
   const method = req.method ?? 'GET';
 
-  res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-headers', 'content-type, authorization, x-api-key, x-strata-client');
-  res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  // Privacy audit 2026-11-24: a name pointed at this computer (DNS rebinding) is not this host, and only the model API (/v1/, its own rules in
+  // openai()) may be read by a page of another origin; the host's own API never carries CORS headers.
+  if (!hostAllowed(url)) return error(res, 403, 'Open Strata at 127.0.0.1 or localhost.');
+  if (path.startsWith('/v1/')) {
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-headers', 'content-type, authorization, x-api-key, x-strata-client');
+    res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  }
   if (method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
@@ -734,10 +741,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    if (path.startsWith('/api/') && req.headers.origin) {
-      const origin = new URL(req.headers.origin);
-      if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) return error(res, 403, 'Open the local Strata app to use host controls.');
-    }
+    if (path.startsWith('/api/') && foreignApiRequest(req)) return error(res, 403, 'Open the local Strata app to use host controls.');
     if (path.startsWith('/api/')) {
       const modelOperation = !['GET', 'OPTIONS'].includes(method) && /^\/api\/(models|local-models|runtime|image-models|engine|native)(\/|$)/.test(path) && !['/api/runtime/plan', '/api/engine/validate', '/api/local-models/inspect'].includes(path);
       if (modelOperation) modelOperations++;
@@ -1010,7 +1014,14 @@ async function api(req, res, path, method, url) {
   }
 
   if (path === '/api/setup' && method === 'GET') return json(res, 200, setupState());
+  if (path === '/api/network-mode' && method === 'GET') return json(res, 200, { offline: readOffline(componentsDirectory()) });
+  if (path === '/api/network-mode' && method === 'PUT') {
+    const body = await readBody(req);
+    if (typeof body.offline !== 'boolean') return error(res, 400, 'Choose on or off.');
+    return json(res, 200, { offline: writeOffline(componentsDirectory(), body.offline) });
+  }
   if (path === '/api/engine/first-run' && method === 'GET') {
+    if (readOffline(componentsDirectory())) return json(res, 200, { status: 'offline', gpus: [] });
     if (!control?.updateCheck) return json(res, 200, { status: 'unavailable', gpus: [] });
     const info = await engineFirstRun({ control, gpus: hardware.cachedHardware()?.gpus ?? [] });
     try { let at = componentsDirectory(); while (at && !existsSync(at) && dirname(at) !== at) at = dirname(at); const f = statfsSync(at); info.freeBytes = Number(f.bavail) * Number(f.bsize); } catch { /* unknown: no warning */ }
@@ -1041,6 +1052,7 @@ async function api(req, res, path, method, url) {
     return json(res, 202, native.operation('install-engine-file', { path: target }));
   }
   // This fork: the packaged app updates only through its own signed updater (no signed feed; the engine ships inside the installer).
+  if (path === '/api/updates/check' && method === 'GET' && readOffline(componentsDirectory())) return error(res, 409, OFFLINE_ON);
   if (path === '/api/updates/check' && method === 'GET' && control?.updateCheck && appUpdater) return json(res, 200, await checkAppUpdates({ appUpdater, appVersion: process.env.STRATA_APP_VERSION || null, engineVersion: native.state().installed?.engine?.version ?? null }));
   if (path === '/api/updates/check' && method === 'GET') return json(res, 200, await checkUpdates({ appVersion:appVersionToShow(setupState().app.version,native.state().version), engineVersion:native.state().available?(native.state().installed?.engine?.version??null):(await engine.config()).engine.version }));
 
@@ -1706,7 +1718,8 @@ async function staticFile(req, res, path) {
 
   const type = MIME[extname(file)] ?? 'application/octet-stream';
   const size=statSync(file).size;
-  const headers={'content-type':type,'cache-control':file.endsWith('index.html')?'no-store':'public, max-age=3600','accept-ranges':'bytes'};
+  const page=extname(file)==='.html'?{'content-security-policy':contentSecurityPolicy(readFileSync(file,'utf8'))}:{};
+  const headers={...page,'x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-type':type,'cache-control':file.endsWith('index.html')?'no-store':'public, max-age=3600','accept-ranges':'bytes'};
   if(req.headers.range) {
     const match=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
     const start=match?.[1]?Number(match[1]):match?.[2]?Math.max(0,size-Number(match[2])):NaN;

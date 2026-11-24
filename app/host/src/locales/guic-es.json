@@ -89,5 +89,11 @@
  "guic88": "Indicación integrada",
  "guic89": "Tu propia indicación",
  "guic90": "Esta indicación del sistema es demasiado larga. Acórtala a menos de 64 KB y vuelve a guardar.",
- "guic91": "La indicación del sistema se cambió en otra ventana. Cierra esto y ábrelo de nuevo para ver la versión más reciente."
+ "guic91": "La indicación del sistema se cambió en otra ventana. Cierra esto y ábrelo de nuevo para ver la versión más reciente.",
+ "guic92": "Modo sin conexión",
+ "guic93": "Strata no se conecta a nada fuera de este equipo: sin descargas ni búsquedas de actualizaciones. Compartir y el túnel de Cloudflare siguen bajo tu control. Las descargas en curso no se detienen.",
+ "guic94": "El modo sin conexión está activado. Desactívalo en Ajustes > Acerca de > Privacidad y vuelve a intentarlo.",
+ "guic95": "No se encontró un motor que funcione en este PC. Strata puede consultarlo en github.com; no se descarga nada hasta que lo elijas.",
+ "guic96": "Buscar un motor",
+ "guic97": "Abre Strata en 127.0.0.1 o localhost."
 }

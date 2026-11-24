@@ -24,6 +24,7 @@ import { createAutoTune, writeTuneConfig } from './native-autotune.mjs';
 import { plainError, PHASE_TEXT, UPDATE_WAITING_FOR_LOCK, APP_UPDATER_NOT_READY, APP_CHECK_FAILED } from './update-messages.mjs';
 import { checkAndParseRunConfig, checkRunConfig, describeIssues } from './run-config-check.mjs';
 import { openTextFile } from './open-text-file.mjs';
+import { OFFLINE_ON } from './network-mode.mjs';
 import { markEngine, engineRefusal } from './engine-version.mjs';
 import { friendlyModelName } from './model-names.mjs';
 import { parseSaved as parseRoles, mirror as mirrorRoles } from './gpu-roles.mjs';
@@ -71,7 +72,7 @@ function savedKv(config,model,catalog){
 
 /** The plain words for "no usable engine": the model still downloads, but loading needs the engine (owner decision 2026-10-18). */
 export const ENGINE_NOT_RECOGNISED='Strata didn’t recognise an engine for this computer. The model is downloaded, but it can’t run until the right engine is installed. Open Settings → About.';
-export function createNativeControl({directory,requests=()=>[],changed=()=>{},spawnProcess=spawn,fetcher=fetch,modelsDirectory,nativeDataDirectory=value=>value,beforeLoad=async()=>{},hardwareProbe=()=>[],control=null,ready=null,appUpdater=null,lockWaitMs=60000,lockPollMs=2000,defaultRepo=process.env.STRATA_NATIVE_REPO??resolve(ROOT,'../../Strata')}={}){
+export function createNativeControl({directory,requests=()=>[],changed=()=>{},spawnProcess=spawn,fetcher=fetch,modelsDirectory,nativeDataDirectory=value=>value,beforeLoad=async()=>{},hardwareProbe=()=>[],control=null,ready=null,appUpdater=null,implicitDownloads=true,offline=()=>false,lockWaitMs=60000,lockPollMs=2000,defaultRepo=process.env.STRATA_NATIVE_REPO??resolve(ROOT,'../../Strata')}={}){
  mkdirSync(directory,{recursive:true});
  const settingsPath=join(directory,'native-host.json');
  let preferences=readJson(settingsPath,{repo:defaultRepo});
@@ -266,10 +267,16 @@ export function createNativeControl({directory,requests=()=>[],changed=()=>{},sp
      await refresh(true);
      const note=engineStep?.summaryNote();
      const finalResult=engineStep?job.result:result;
+     const family=result.install.family??args.family??'qwen';
+     const size=String(args.model).toLowerCase(),model=family==='qwen'?size:`${family}-${size}`;
+     try{
+      const {path,config}=record(model);
+      withDefaultReasoningEffort(path,config);
+      /* The marker distinguishes an explicitly chosen 32K context from an old default. */
+      if(args.contextChosen===true)rememberSetting(path,'ui_context_chosen',true);
+     }catch{/* the install itself is done */}
      if(note)return {...finalResult,summary:note};
-     /* A context the person picked is kept with a marker (ui_context_chosen), so only an old saved 32K, which has no marker, is read as the old default. */
-     if(args.contextChosen===true){try{const id=(result.install.family??args.family??'qwen')==='qwen'?String(args.model).toLowerCase():`${args.family}-${String(args.model).toLowerCase()}`;rememberSetting(record(id).path,'ui_context_chosen',true);}catch{/* the install itself is done */}}
-     if(args.loadAfter){const model=(result.install.family??args.family??'qwen')==='qwen'?String(args.model).toLowerCase():`${args.family}-${String(args.model).toLowerCase()}`;return loadEngine(job,{model,firstLoad:true,multiple:!!args.multiple,resourceProfile:args.resourceProfile,vision:args.loadVision,...(args.visionUnavailable===true?{visionUnavailable:true}:{}),...(typeof args.drafting==='string'?{values:{drafting:args.drafting}}:{})});}
+     if(args.loadAfter)return loadEngine(job,{model,firstLoad:true,multiple:!!args.multiple,resourceProfile:args.resourceProfile,vision:args.loadVision,...(args.visionUnavailable===true?{visionUnavailable:true}:{}),...(typeof args.drafting==='string'?{values:{drafting:args.drafting}}:{})});
      return finalResult;
     }
    }
@@ -396,8 +403,9 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
  /* Auto and its drafter (the tuned one where the set has one, else the standard DFlash2 drafter: whatever Control's Auto plan says is `needed`), on every path that starts a model: a plain load, a restart of the stopped models and a tuning run fetch it as the Models screen's own Load does (Control: pinned, checked, marked, licence and notice), but they were not asked for it, so
     the 12 hour rule of the Terminal's launch applies (--throttle: a feed that had nothing a short while ago is not asked again, a feed that does not answer is not an error). A choice the person named or saved (MTP, DFlash2, off) wins: this never runs for it. */
  function autoChoice(value){return value==null||String(value).toLowerCase()==='auto';}
+ /* This fork: the app passes implicitDownloads:false, so a restart, a tuning run and a plain Load never fetch; only the Models screen's own Load (its dialog lists the download) and the load right after a setup do. */
  async function fetchAutoDrafter(job,args,configFile,drafts,{noSplit=false,after}={}){
-  if(!packaged||typeof control.draftingFetch!=='function'||drafts?.needed!==true||!autoChoice(readJson(configFile).drafting))return false;
+  if(!implicitDownloads||!packaged||typeof control.draftingFetch!=='function'||drafts?.needed!==true||!autoChoice(readJson(configFile).drafting))return false;
   job.engineAbort??=new AbortController();
   try{
    if(job.state==='running'){drafterDownloadStart(job,drafts);emit();}
@@ -440,6 +448,13 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
  }
  /* One key of a model's settings file, set or removed (the Drafting choice): written like the Settings screen writes it, to be there for the next load. */
  function rememberSetting(configFile,key,value){try{const current=readJson(configFile);if(value===null?!(key in current):current[key]===value)return;const next={...current};if(value===null)delete next[key];else next[key]=value;const temp=configFile+'.ui-tmp';writeFileSync(temp,JSON.stringify(next,null,2)+'\n',{mode:0o600});renameSync(temp,configFile);}catch{/* the load goes on with the choice for this start */}}
+ function withDefaultReasoningEffort(configFile,config){
+  const hasEffort=value=>value.reasoning_effort!=null||mergeUserArgs(value.args,captureUserArgs(value)).some(arg=>/^--reasoning-effort(?:=|$)/.test(arg));
+  if(hasEffort(config))return config;
+  const saved=readJson(configFile,null);
+  if(saved&&!hasEffort(saved))rememberSetting(configFile,'reasoning_effort','none');
+  return {...config,reasoning_effort:'none'};
+ }
  /* Which drafter runs, when it is not the one that was asked for (the engine's own words, "Drafting: MTP (DFlash2 didn't fit)"): under Details of the load. */
  async function noteDrafting(job,instance,key){let note='',fellBack=false;try{const r=await fetcher(`http://127.0.0.1:${instance.port}/metrics`,{headers:{authorization:`Bearer ${key}`},signal:AbortSignal.timeout(2000)});if(r.ok){const engine=(await r.json())?.engine;note=String(engine?.drafting_note??'');fellBack=engine?.split_fallback===true;}}catch{/* a convenience */}/* the all-cards split engine: the line of what runs (the server starts the normal layer split by itself when the split engine would not come up) */const lines=[job.drafterNote,fellBack?SPLIT_FELL_BACK:instance.splitNote,note].filter(Boolean);if(lines.length)job.details=[job.details,...lines].filter(Boolean).join('\n');}
  /* ---- The picture files of an installed model that has none (strata_control/pictures.py, run by Control) ----
@@ -547,13 +562,14 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
   let picturesNote=null;{const got=await ensurePictures(job,args,configFile,config,{missing:entry.picturesMissing===true});if(job.state!=='running')return;config=got.config;args=got.args;picturesNote=got.note;}
   /* One drafter per run (strata_control/drafting.py): switching to the MTP on a model set up for DFlash2 fetches the layer once, here; DFlash2 is fetched below. */
   let drafts=await draftPlan(args,configFile),noSplit=false;
-  if(drafts?.mtp_needed===true&&(args.values?.drafting!==undefined||(drafts.split===true||args.firstLoad===true)&&(config.drafting==null||String(config.drafting).toLowerCase()==='auto'))){/* firstLoad: the load right after a setup (Prepare and load), whose plan listed the layer: Auto meaning the MTP on this card fetches it, as the Models screen does (QAGUI 0213) *//* the Models screen's own Load carries the choice; a plain Auto load fetches the layer too when Control says the all-cards split engine will take the start (it runs the MTP and nothing else): the same as the Terminal */await installMtpLayer(job,args,config);if(job.state!=='running')return;await refresh(true);config=checkedSettingsConfig(readFileSync(recordFile(args.model).path,'utf8'));drafts=await draftPlan(args,configFile);
+  if(drafts?.mtp_needed===true&&(args.values?.drafting!==undefined||(drafts.split===true&&implicitDownloads||args.firstLoad===true)&&(config.drafting==null||String(config.drafting).toLowerCase()==='auto'))){/* firstLoad: the load right after a setup (Prepare and load), whose plan listed the layer: Auto meaning the MTP on this card fetches it, as the Models screen does (QAGUI 0213) *//* the Models screen's own Load carries the choice; a plain Auto load fetches the layer too when Control says the all-cards split engine will take the start (it runs the MTP and nothing else): the same as the Terminal */await installMtpLayer(job,args,config);if(job.state!=='running')return;await refresh(true);config=checkedSettingsConfig(readFileSync(recordFile(args.model).path,'utf8'));drafts=await draftPlan(args,configFile);
    /* the offline words say the model starts without a drafter: not when another drafter on this computer stands in (Control's plan names the one the start runs) */
    if(job.drafterNote===MTP_OFFLINE_NOTE&&typeof drafts?.drafter==='string'&&drafts.drafter!=='off'){job.drafterNote=undefined;emit();}
    /* The draft layer for the split could not be had (no internet, disk): the load goes on as the 0.2.10 app did, the normal layer split with the plan DFlash2's again (the Models screen's own Load fetches that drafter below). One plain line says so. */
    if(drafts?.split===true&&drafts.mtp_needed===true){noSplit=true;job.drafterNote=job.drafterNote??'The MTP drafter could not be downloaded.';job.summary='Loading the model…';emit();drafts=await draftPlan(args,configFile,{noSplit:true});}}
   /* A plain load (the Models screen's own Load carries its choice and fetches below): Auto on a set that has the tuned drafter fetches it now, so the start uses it. Not on this computer and not reachable: the MTP or the stock drafter runs as before. */
   if(args.values?.drafting===undefined&&drafts?.needed===true){const got=await fetchAutoDrafter(job,args,configFile,drafts,{noSplit,after:'Loading the model…'});if(job.state!=='running')return;if(got){drafts=await draftPlan(args,configFile,{noSplit});if(job.drafterNote===MTP_OFFLINE_NOTE){job.drafterNote=undefined;emit();}}}
+  config=withDefaultReasoningEffort(configFile,config);
   const {cfg,resources,visionPreferences,parallelChoice,parallelNote:chosenNote}=buildConfig(args,config,drafts?.choice==='dflash2'&&drafts.needed===true&&args.values?.drafting===undefined?'mtp':drafts?.choice??null);/* (a drafter that is not here and will not be fetched by this load: the MTP runs, and the request slots stay) */
   let parallelNote=chosenNote;
   await prepareDrafter(job,args,cfg,configFile,drafts,{noSplit});if(job.state!=='running')return;
@@ -846,7 +862,7 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
   const room=args.resourceProfile==='work';
   return autotuner.start(job,job.kind==='recheck'?'recheck':'tune',{configPath:path,presetId:args.presetId,mode:args.mode,use:args.use,goal:room?'room':'speed',leaveRam:room?20:0,allowSmallDifferences:args.allowSmallDifferences===true,name:args.name},{onProgress:p=>{job.summary=p.text??job.summary;emit();}});
  }
- function operation(kind,args={}){if(!['install','load','pictures','benchmark','tune','autotune','recheck','calibrate','update-engine','update-strata','rollback','install-engine-file','remove','restart-models'].includes(kind))throw new Error('Choose a supported native operation.');if(kind==='restart-models'&&!packaged)throw new Error('Choose a supported native operation.');if(!snapshot.available&&!(packaged&&(COMPONENT_KINDS.includes(kind)||kind==='restart-models')))throw new Error(snapshot.error??'Connect the native Strata installation first.');if(kind==='install'||kind==='load'){const refusal=engineRefusal(snapshot.catalog,args.model,snapshot.engineInfo);if(refusal)throw new Error(refusal);}return begin(kind,job=>kind==='install'?install(job,args):kind==='load'?loadEngine(job,args):kind==='pictures'?picturesOnly(job,args):kind==='benchmark'?benchmark(job,args):kind==='tune'?tune(job,args):kind==='autotune'||kind==='recheck'?autotune(job,args):kind==='remove'?removeModel(job,args):kind==='restart-models'?restartStopped(job):program(job,args),{guided:args.guided===true,model:args.model,...(args.family?{family:args.family}:{})});}
+ function operation(kind,args={}){if(!['install','load','pictures','benchmark','tune','autotune','recheck','calibrate','update-engine','update-strata','rollback','install-engine-file','remove','restart-models'].includes(kind))throw new Error('Choose a supported native operation.');if(['update-engine','update-strata','pictures'].includes(kind)&&offline())throw new Error(OFFLINE_ON);if(kind==='restart-models'&&!packaged)throw new Error('Choose a supported native operation.');if(!snapshot.available&&!(packaged&&(COMPONENT_KINDS.includes(kind)||kind==='restart-models')))throw new Error(snapshot.error??'Connect the native Strata installation first.');if(kind==='install'||kind==='load'){const refusal=engineRefusal(snapshot.catalog,args.model,snapshot.engineInfo);if(refusal)throw new Error(refusal);}return begin(kind,job=>kind==='install'?install(job,args):kind==='load'?loadEngine(job,args):kind==='pictures'?picturesOnly(job,args):kind==='benchmark'?benchmark(job,args):kind==='tune'?tune(job,args):kind==='autotune'||kind==='recheck'?autotune(job,args):kind==='remove'?removeModel(job,args):kind==='restart-models'?restartStopped(job):program(job,args),{guided:args.guided===true,model:args.model,...(args.family?{family:args.family}:{})});}
  /* ---- The models folder card (0.2.2): what a picked folder means, and the three choices. The copying is Control's (strata models move). ---- */
  const currentModelsFolder=()=>preferences.downloadDirectory??(modelsDirectory?modelsDirectory():snapshot.installed?.data_folder)??null;
  const moveFile=()=>join(directory,'models-move.cancel');

@@ -54,6 +54,12 @@ export function requiresRealEngine() {
 function strataUrl() {
   const raw = process.env.STRATA_SERVER_URL?.trim();
   if (!raw) return STRATA_DEFAULT_URL;
+  // The installed app sends chats to this computer only: a variable that names another one is not followed.
+  if (process.env.STRATA_PACKAGED === '1') {
+    let host = '';
+    try { host = new URL(raw).hostname; } catch { /* not an address */ }
+    if (!/^(localhost|\[::1\]|127(\.\d{1,3}){3})$/.test(host)) return STRATA_DEFAULT_URL;
+  }
   return raw.replace(/\/+$/, '').endsWith('/v1') ? raw.replace(/\/+$/, '') : `${raw.replace(/\/+$/, '')}/v1`;
 }
 
@@ -118,7 +124,9 @@ export async function detectBackend({ force = false } = {}) {
 
   if (!force && backend && backend.kind !== 'engine' && Date.now() - checkedAt < 20_000) return backend;
 
-  for (const c of CANDIDATES) {
+  // The installed app answers with Strata's own engine only: another program on a well-known local port (it may relay chats to a cloud model) is never
+  // handed a chat.
+  for (const c of process.env.STRATA_PACKAGED === '1' ? [] : CANDIDATES) {
     try {
       const res = await fetch(`${c.url}/models`, { signal: AbortSignal.timeout(700) });
       if (res.ok) {

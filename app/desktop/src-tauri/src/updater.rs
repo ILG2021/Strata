@@ -21,7 +21,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
-/// Where an endpoint other than the one in `tauri.conf.json` may come from: a local test feed. Only loopback or https.
+/// Where an endpoint other than the one in `tauri.conf.json` may come from: a local test feed on this computer, nowhere else (privacy).
 const ENDPOINT_ENV: &str = "STRATA_UPDATE_APP_ENDPOINT";
 
 #[derive(Clone, Default)]
@@ -50,7 +50,7 @@ pub struct Bridge {
 
 fn endpoint_override() -> Option<String> {
     let url = std::env::var(ENDPOINT_ENV).ok()?;
-    if url.starts_with("https://") || url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:") {
+    if url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:") {
         Some(url)
     } else {
         None
@@ -271,9 +271,9 @@ mod tests {
     }
 
     #[test]
-    fn only_https_or_loopback_endpoints_may_override_the_configured_one() {
+    fn only_loopback_endpoints_may_override_the_configured_one() {
         for (value, ok) in [
-            ("https://updates.example.com/latest.json", true),
+            ("https://updates.example.com/latest.json", false),
             ("http://127.0.0.1:19080/app/latest.json", true),
             ("http://localhost:19080/latest.json", true),
             ("http://example.com/latest.json", false),

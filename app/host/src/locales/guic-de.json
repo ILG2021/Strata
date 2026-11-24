@@ -89,5 +89,11 @@
  "guic88": "Eingebauter Prompt",
  "guic89": "Ihr eigener Prompt",
  "guic90": "Dieser Systemprompt ist zu lang. Kürzen Sie ihn auf unter 64 KB und speichern Sie dann erneut.",
- "guic91": "Der Systemprompt wurde in einem anderen Fenster geändert. Schließen Sie dies und öffnen Sie es erneut, um die neueste Fassung zu sehen."
+ "guic91": "Der Systemprompt wurde in einem anderen Fenster geändert. Schließen Sie dies und öffnen Sie es erneut, um die neueste Fassung zu sehen.",
+ "guic92": "Offline-Modus",
+ "guic93": "Strata selbst verbindet sich mit nichts außerhalb dieses Computers: keine Downloads und keine Update-Prüfungen. Freigabe und Cloudflare-Tunnel bleiben unter Ihrer Kontrolle. Bereits laufende Downloads werden nicht angehalten.",
+ "guic94": "Der Offline-Modus ist aktiv. Schalten Sie ihn unter Einstellungen > Info > Datenschutz aus und versuchen Sie es erneut.",
+ "guic95": "Auf diesem PC wurde keine funktionierende Engine gefunden. Strata kann bei github.com danach fragen; nichts wird heruntergeladen, bevor Sie es auswählen.",
+ "guic96": "Nach einer Engine suchen",
+ "guic97": "Öffnen Sie Strata unter 127.0.0.1 oder localhost."
 }

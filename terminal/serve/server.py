@@ -3195,6 +3195,10 @@ class Vision:
                 raise ValueError(f"the image's data: URL could not be read ({e})") from None
         if source.startswith(("http://", "https://")):
             return Vision.download(source)
+        if os.environ.get("STRATA_EGRESS"):
+            # the desktop app shares this API with other devices: a request from one must not have a file on this computer read.  The app
+            # itself sends pictures as data: URLs.
+            raise ValueError("the picture must be sent as a data: URL")
         path = source[7:] if source.startswith("file://") else source
         # refused before anything looks at the path: file://host/share/x.png is \\host\share\x.png ("file://C:/x.png",
         # a drive, is a client's spelling of file:///C:/x.png)
@@ -3211,20 +3215,9 @@ class Vision:
 
     @staticmethod
     def download(url: str) -> bytes:
-        """An image URL's bytes, at most IMAGE_URL_MAX of them: the whole response was read, so a huge or endless one
-        filled the memory.  One that cannot be read is a ValueError (a 400 that says so), not a dropped connection."""
-        too_big = f"the image URL's file is over {IMAGE_URL_MAX >> 20} MiB"
-        try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "strata"}), timeout=60) as r:
-                size = r.headers.get("Content-Length") or ""
-                if size.isdigit() and int(size) > IMAGE_URL_MAX:
-                    raise ValueError(too_big)
-                data = r.read(IMAGE_URL_MAX + 1)
-        except (OSError, HTTPException) as e:
-            raise ValueError(f"the image URL could not be read: {e}") from None
-        if len(data) > IMAGE_URL_MAX:
-            raise ValueError(too_big)
-        return data
+        """This fork never fetches a picture from an address (privacy: whoever sends a request could have this PC ask any server, on the
+        internet or on the local network, for it).  Always a ValueError: a 400 that says what to send instead."""
+        raise ValueError("pictures are not downloaded from a web address; send the picture itself as a data: URL")
 
     @staticmethod
     def _exif_rotated(data: bytes) -> bool:

@@ -5,7 +5,7 @@ import { VersionPicker } from './VersionPicker';
 import { FamilySwitch } from './FamilySwitch';
 import { PcComputer } from './PcComputer';
 import { cardRoomGb, contextCacheGb, fitOn, memoryNeeded, versionFit } from '../lib/native-fit';
-import { contextIsTight, defaultContext, DEFAULT_CONTEXT, openingContext } from '../lib/default-context';
+import { contextIsTight, defaultContext, DEFAULT_CONTEXT, openingContext, withExtraContext } from '../lib/default-context';
 import { GpuRoles } from './GpuRoles';
 import { fromLegacy, normalize as normalizeRoles, order as roleOrder, recommend as recommendRoles, rows as roleRows, sameRoles, savedRoles as savedRolesOf, vramOn, type RoleCard, type Roles } from '../lib/gpu-roles';
 import { Btn, Dialog, ErrorNotice, Icon, Select } from './ui';
@@ -72,7 +72,7 @@ export function NativeModels({ onOtherModels, onReady, onImport, onConnectEngine
     const isHy4Selected = selectedFamily?.family === HY4_FAMILY || selectedFamily?.family === INKLING_FAMILY;
     const installed = native?.installed?.models.find(m => m.model === selectedSize?.id), listPending = installedListPending(native);
     // The sizes this model offers for the conversation context; it opens at 128K (or its largest size when that is smaller).
-    const contextList = native?.catalog?.contexts ?? [8192, 32768, 65536, 131072, 262144];
+    const contextList = withExtraContext(native?.catalog?.contexts ?? [8192, 32768, 65536, 131072, 262144]);
     // The model that is running is shown as running, with Unload: not offered for loading again.
     const downloaded = native?.installed?.models ?? [], allSizes = families.flatMap(f => f.sizes);
     // A DeepSeek model of an earlier Strata (Control: no longer run): one line with where its files are, nothing to load or delete here.

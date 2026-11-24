@@ -1779,7 +1779,7 @@
   "s1761": "Strata ist nicht mit seiner Engine verbunden.",
   "s1762": "Strata-optimierte Modelle",
   "s1763": "Strata bereitet alle Teildateien, die Entwurfsschicht und gemeinsame Dateien vor. Abgeschlossene Downloads werden wiederverwendet.",
-  "s1764": "Strata sendet keine Nutzungstelemetrie. Gespräche bleiben auf diesem Computer, im Datenordner von Strata. Wenn Sie ein API-Modell auswählen, werden das Gespräch und die Anweisungen aktivierter Skills an dessen Anbieter gesendet. Das UI-Anfrageprotokoll hält Client-, Zeit- und Token-Metadaten im Arbeitsspeicher. Die native API-Überwachung kann bei Aktivierung Anfrageinhalte im Arbeitsspeicher behalten. Verbundene Tools greifen auf die von Ihnen eingerichteten Ressourcen zu.",
+  "s1764": "Strata sendet keine Nutzungstelemetrie. Unterhaltungen bleiben auf diesem Computer, im Datenordner von Strata. Downloads und Update-Prüfungen nutzen nur GitHub und Hugging Face. Wenn Sie Strata freigeben oder einen Cloudflare-Tunnel öffnen, laufen Anfragen und Antworten über dieses Netzwerk. Das Anfrageprotokoll der Oberfläche hält Client-, Zeit- und Token-Metadaten im Arbeitsspeicher. Die native API-Überwachung kann Anfrageinhalte im Arbeitsspeicher behalten, wenn sie aktiviert ist.",
   "s1765": "Strata verwendet diese Dateien an ihrem Speicherort. Nach dem Hinzufügen können Sie das Modell laden.",
   "s1766": "Strata — Chat öffnen",
   "s1767": "Stratas Budget",

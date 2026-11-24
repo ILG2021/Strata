@@ -196,7 +196,7 @@ test('no internet: the model loads without pictures, says so in one short line, 
     assert.equal(instance.vision, false);
     assert.equal(f.saved[0].vision, undefined, 'started without the picture reader');
     assert.equal(f.installs().length, 0);
-    assert.deepEqual(f.config(), JSON.parse(configBefore), 'the run config says what it said: Read pictures stays on for the next Load');
+    assert.deepEqual(f.config(), { ...JSON.parse(configBefore), reasoning_effort: 'none' }, 'the run config says what it said (a load only fills in the default thinking effort): Read pictures stays on for the next Load');
     assert.deepEqual(f.native.state().jobs.map(j => j.kind), ['load']);
   } finally { await f.native.close(); f.cleanup(); }
 });

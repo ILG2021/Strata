@@ -50,19 +50,24 @@ Strata comes in three parts that share one engine: the **desktop app**, the **Te
 the model. The section above is about the engine's HTTP server. This is what the other two add.
 
 - **The app's host listens on this PC only.** The app serves its page from a local host process on `127.0.0.1` (port 8791 unless
-  changed). A request to its `/api/` endpoints that carries a browser `Origin` from any other site gets 403. The app shell holds a
+  changed). A request whose `Host` is not an IP address or `localhost` gets 403 (DNS rebinding), and so does a request to its `/api/` endpoints from any page but the host's own (another port of this computer included). Its page carries a content security policy that loads from the host only. The app shell holds a
   random secret (32 characters or more, compared in constant time) that is needed to quit the host or tell it which window is open,
   and the host gives its own helper processes a second random secret. By default the models the app starts are served on this PC only.
-- **Sharing is a separate, key-protected listener.** "Share with other devices" (and the Cloudflare tunnel) will not start until an
-  API key is set. It opens a different listener that answers only `/v1/models`, `/v1/chat/completions` and `/v1/messages`, never the
-  app's page or its host endpoints.
+- **Sharing is a separate listener.** "Share with other devices" and the Cloudflare tunnel are off until you start
+  them. They may be started without an API key; the app then warns that anyone who reaches the address can use the model, so set a key.
+  The listener answers only `/v1/models`, `/v1/chat/completions`, `/v1/messages` and, on the local network, `/v1/responses`, never the
+  app's page or its host endpoints. It is plain HTTP on the local network; a tunnel's traffic passes through Cloudflare.
+- **The app's own network use.** Control programs started by the app reach GitHub and Hugging Face over https for a download you started,
+  and nothing while serving (`terminal/strata_control/egress.py`). A request's picture must be a `data:` URL: web addresses and file paths
+  are refused. Settings > About > Privacy > Offline mode stops downloads and update checks. This guards Strata's own code; it is not a sandbox.
 - **App and Terminal talk through an owner channel.** One owner process per installation starts and ends the engine, and a second
   client (the Terminal) attaches to it. On macOS and Linux that is a private Unix socket in a folder only you can open. On Windows it
   is a TCP listener on `127.0.0.1` that answers only requests carrying a 256-bit token kept in an owner-only folder. That is a weaker
   guarantee than a socket other users cannot open: on Windows the token is what protects it, as with any loopback service that has a
   token (`terminal/strata_control/owner_transport.py`). The bridge between the app shell and the host (used for the app update) is also loopback and protected by a token.
-- **Starting a model and serving never download anything.** Downloads and updates are one explicit step: `strata update`, or "Update
-  engine" and "Update Strata" in the app's Settings. Models and saved tuning are never replaced by an update.
+- **Serving never downloads anything.** Restarting a model, tuning and a plain load do not either. A Load from the Models screen fetches the
+  drafter or picture files its choices need, and the load right after a setup fetches the draft layer that setup listed. Models and saved
+  tuning are never replaced by an update.
 - **Updates come from a signed feed.** The release publishes `strata-feed.json` and `strata-feed.json.sig` (Ed25519). An installed
   Strata checks the signature against the public key it carries (`strata_control/update_keys.json`), refuses a feed older than the last
   one it accepted (a replayed old feed) or expired, and checks every engine package against its SHA-256, its signed manifest and the

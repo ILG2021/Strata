@@ -89,5 +89,11 @@
  "guic88": "Prompt embutido",
  "guic89": "Seu próprio prompt",
  "guic90": "Este prompt do sistema é longo demais. Deixe-o com menos de 64 KB e salve novamente.",
- "guic91": "O prompt do sistema foi alterado em outra janela. Feche esta e abra de novo para ver a versão mais recente."
+ "guic91": "O prompt do sistema foi alterado em outra janela. Feche esta e abra de novo para ver a versão mais recente.",
+ "guic92": "Modo offline",
+ "guic93": "O próprio Strata não se conecta a nada fora deste computador: sem downloads e sem verificações de atualização. O compartilhamento e o túnel do Cloudflare continuam sob seu controle. Downloads em andamento não são interrompidos.",
+ "guic94": "O modo offline está ativado. Desative-o em Configurações > Sobre > Privacidade e tente novamente.",
+ "guic95": "Nenhum mecanismo funcional foi encontrado neste PC. O Strata pode consultar o github.com; nada é baixado até você escolher.",
+ "guic96": "Procurar um mecanismo",
+ "guic97": "Abra o Strata em 127.0.0.1 ou localhost."
 }

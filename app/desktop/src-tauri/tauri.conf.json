@@ -49,6 +49,9 @@
     },
     "createUpdaterArtifacts": false,
     "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
       "nsis": {
         "installMode": "currentUser",
       "template": "nsis/installer.nsi",

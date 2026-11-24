@@ -8,9 +8,6 @@ import type { NativeJob } from '../lib/native';
 import { megabytes } from '../lib/format';
 import { FirstRunLanguage } from './FirstRunLanguage';
 import { firstRunCard } from '../lib/first-run-card';
-import { connectOnly } from '../lib/connect-only';
-import { completeSetupStep, openSetup, setSettingsSection } from '../lib/store';
-import { navigate } from '../lib/router';
 
 /** What the host says about this PC's engine (GET /api/engine/first-run). */
 export interface FirstRunInfo {
@@ -71,12 +68,14 @@ export function EngineFirstRun({ onDone }: { onDone: () => void }) {
     const file = useRef<HTMLInputElement>(null);
     const started = useRef(false);
 
+    // Asking github.com for the engine list is the person's press, not the screen's: nothing is asked before it.
+    const [asked, setAsked] = useState(false);
     const look = useCallback(() => {
+        setAsked(true);
         setInfo(null);
         setProblem('');
         api.get<FirstRunInfo>('/api/engine/first-run').then(setInfo, e => setInfo({ status: 'error', gpus: [], message: e instanceof Error ? e.message : String(e) }));
     }, []);
-    useEffect(() => { look(); }, [look]);
 
     // follow the download / install job
     useEffect(() => {
@@ -127,20 +126,6 @@ export function EngineFirstRun({ onDone }: { onDone: () => void }) {
         }
     }
 
-    // #5529: no engine here, on purpose: setup ends dismissed and Settings > Models opens with a Custom model API connection started
-    async function connectOnlyClick() {
-        setBusy(true);
-        setProblem('');
-        try {
-            await connectOnly({ completeSetupStep, openSetup, setSettingsSection, openSettings: () => navigate('chat', undefined, { settings: '1' }) });
-        }
-        catch (e) {
-            setProblem(e instanceof Error ? e.message : String(e));
-        }
-        finally {
-            setBusy(false);
-        }
-    }
     const running = job?.state === 'running';
     const failed = !!job && (job.state === 'error' || job.state === 'cancelled');
     const percent = Number(job?.result?.install?.download?.percent ?? 0);
@@ -160,6 +145,10 @@ export function EngineFirstRun({ onDone }: { onDone: () => void }) {
         body = <><div className="onboard-welcome-copy"><h1 tabIndex={-1} data-initial-focus>{tr("Downloading the engine")}</h1>
             <p>{bytes && job?.result?.install?.download ? `${doneMb} of ${mb(bytes)} MB${eta ? ' · ' + eta : ''}` : tr(job?.summary ?? 'Starting…')}</p></div>
             <div className="onboard-error" style={{ maxWidth: 520, margin: '0 auto', width: '100%' }}><Bar value={percent} label="Downloading the engine"/><p className="small muted" style={{ textAlign: 'center' }}>{tr("You can close Strata; it continues where it stopped.")}</p></div></>;
+    }
+    else if (!asked) {
+        body = <><div className="onboard-welcome-copy"><h1 tabIndex={-1} data-initial-focus>{tr("Welcome to Strata")}</h1><p>{tr("No working engine was found on this PC. Strata can ask github.com for one; nothing is downloaded until you choose it.")}</p></div>
+            <footer className="onboard-footer onboard-footer--welcome"><Btn variant="primary" onClick={look}>{tr("Look for an engine")}</Btn>{pick("Choose a downloaded file…")}<button type="button" className="onboard-continue-anyway" onClick={onDone}>{tr("Continue without an engine")}</button></footer></>;
     }
     else if (!info) {
         body = <div className="onboard-welcome-copy"><h1 tabIndex={-1} data-initial-focus>{tr("Welcome to Strata")}</h1><p role="status">{tr("Looking at your graphics card…")}</p></div>;
@@ -198,7 +187,7 @@ export function EngineFirstRun({ onDone }: { onDone: () => void }) {
                 {job?.details ? <details className="error-detail"><summary className="small">{tr('Details')}</summary><pre className="small muted">{job.details}</pre></details> : null}
                 <p className="small muted">{percent >= 100 ? tr("The file was downloaded. Continue tries the install again.") : tr("The download stopped. Continue picks it up where it stopped.")}</p></div> : null}
             {problem ? <div className="onboard-error" style={{ maxWidth: 560, margin: '0 auto' }}><p role="alert" className="small inline-error">{problem}</p></div> : null}
-            <footer className="onboard-footer onboard-footer--welcome">{actions}<button type="button" className="onboard-continue-anyway" disabled={busy || running} onClick={() => void connectOnlyClick()}>{tr("Only connect to Strata on another computer")}</button><small>{tr("Nothing is downloaded. You can add the engine later from the Models page.")}</small></footer></>;
+            <footer className="onboard-footer onboard-footer--welcome">{actions}<small>{tr("Nothing is downloaded. You can add the engine later from the Models page.")}</small></footer></>;
     }
     return <div className="setup guided-onboarding" data-step="engine">{hidden}<header className="onboard-header"><Brand variant="lockup" height={22}/><FirstRunLanguage/></header>{body}</div>;
 }

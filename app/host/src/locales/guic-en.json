@@ -89,5 +89,11 @@
  "guic88": "Built-in prompt",
  "guic89": "Your own prompt",
  "guic90": "This system prompt is too long. Make it shorter than 64 KB, then save again.",
- "guic91": "The system prompt was changed in another window. Close this and open it again to see the newest version."
+ "guic91": "The system prompt was changed in another window. Close this and open it again to see the newest version.",
+ "guic92": "Offline mode",
+ "guic93": "Strata itself connects to nothing outside this computer: no downloads and no update checks. Sharing and the Cloudflare tunnel stay under your control. Downloads that are already running are not stopped.",
+ "guic94": "Offline mode is on. Turn it off in Settings > About > Privacy, then try again.",
+ "guic95": "No working engine was found on this PC. Strata can ask github.com for one; nothing is downloaded until you choose it.",
+ "guic96": "Look for an engine",
+ "guic97": "Open Strata at 127.0.0.1 or localhost."
 }

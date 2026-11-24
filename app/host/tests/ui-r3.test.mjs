@@ -156,7 +156,7 @@ test('a context picked after this update sticks, 32K included; only an old saved
   assert.equal(openingContext(65536, list), 65536);
   const host = read('server/native-control.mjs');
   assert.match(host, /\.\.\.\(args\.contextChosen===true\?\{ui_context_chosen:true\}:\{\}\)/, 'a load saves the marker');
-  assert.match(host, /rememberSetting\(record\(id\)\.path,'ui_context_chosen',true\)/, 'an install saves it too');
+  assert.match(host, /const \{path,config\}=record\(model\);[\s\S]{0,300}?if\(args\.contextChosen===true\)rememberSetting\(path,'ui_context_chosen',true\)/, 'an install saves it too');
   assert.match(host, /contextChosen:cfg\.ui_context_chosen===true/, 'and it is read back');
   assert.match(models, /openingContext\(installed\.context, contextList, installed\.contextChosen === true\)/);
   assert.match(models, /\.\.\.\(contextPicked \? \{ contextChosen: true \} : \{\}\)/, 'a pick is sent with the install');

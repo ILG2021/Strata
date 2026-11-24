@@ -9,6 +9,16 @@ export const DEFAULT_CONTEXT = 131072;
 /** What the Models page used to open with: a saved model that holds exactly this has never had a context chosen for it. */
 export const OLD_DEFAULT_CONTEXT = 32768;
 
+/**
+ * The sizes the app's context lists show: the catalog's, plus 16K, which setup's own menu does not list (setup takes any size). Small cards that
+ * answer short chats save about 1 GB of graphics memory against 128K. Only where the catalog itself goes from under 16K to over it.
+ */
+export const EXTRA_CONTEXT = 16384;
+export function withExtraContext(choices: readonly number[]): number[] {
+  const fits = choices.some(n => n < EXTRA_CONTEXT) && choices.some(n => n > EXTRA_CONTEXT);
+  return choices.includes(EXTRA_CONTEXT) || !fits ? [...choices] : [...choices, EXTRA_CONTEXT].sort((a, b) => a - b);
+}
+
 /** The default among the sizes a model offers: 128K, or the largest size under it. */
 export function defaultContext(choices: readonly number[] | null | undefined): number {
   const sizes = (choices ?? []).filter(n => Number.isFinite(n) && n > 0);

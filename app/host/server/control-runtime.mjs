@@ -16,6 +16,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { OFFLINE_ON, readOffline } from './network-mode.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -86,6 +87,8 @@ export function sourceServerEnvironment(env = process.env) {
   return next;
 }
 
+const DOWNLOAD_OVERRIDES = new Set(['HF_ENDPOINT', 'STRATA_PREBUILT_URL', 'STRATA_UPDATE_FEED', 'STRATA_UPDATE_ALLOW_HTTP', 'STRATA_UPDATE_TRUSTED_KEYS', 'STRATA_DFLASH2_TUNED_URL', 'STRATA_SOURCE']);
+
 /** The environment Control runs in: nothing from the user's Python, and acquiring forbidden. */
 export function controlEnvironment(control, { env = process.env, components = componentsDirectory({ env }), acquire = false } = {}) {
   const next = { ...env };
@@ -94,11 +97,15 @@ export function controlEnvironment(control, { env = process.env, components = co
   // Keep inherited TLS key logging out of Control, including Windows environment keys with mixed casing.
   for (const key of Object.keys(next)) {
     if (key.toUpperCase() === 'SSLKEYLOGFILE') delete next[key];
+    // The installed app downloads from GitHub and Hugging Face only: no variable of the person's environment names another place.
+    else if (env.STRATA_PACKAGED === '1' && DOWNLOAD_OVERRIDES.has(key.toUpperCase())) delete next[key];
   }
   const result = {
     ...next,
     PYTHONNOUSERSITE: '1', PYTHONUTF8: '1', PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8',
     STRATA_NO_ACQUIRE: '1', STRATA_COMPONENTS_DIR: components,
+    // What a Control program may reach (terminal/strata_control/egress.py): GitHub and Hugging Face for an explicit download, nothing in offline mode.
+    STRATA_EGRESS: readOffline(components) ? 'offline' : 'allowlist',
     // The app's own settings file, beside its components: Control and the installer never read or write the file an older
     // command-line Strata keeps in %APPDATA% / ~/.config (its list of Strata folders), so an old install is never adopted.
     ...(components ? { STRATA_SETTINGS_FILE: env.STRATA_SETTINGS_FILE || join(dirname(components), 'app-settings.json') } : {}),
@@ -141,6 +148,7 @@ const BOOT = {
 
 /** Run one CLI command of Control (or, with `boot`, one of its modules). Resolves { code, json, text, stderr }; rejects only if it cannot start or times out. */
 export function runCli(control, args, { env = process.env, timeoutMs = 60_000, spawnProcess = spawn, components, acquire = false, onLine = null, signal = null, boot = null, track = null } = {}) {
+  if (acquire && readOffline(components ?? componentsDirectory({ env }))) return Promise.reject(new ControlError(OFFLINE_ON, { code: 'offline_mode' }));
   return new Promise((resolveRun, reject) => {
     const child = spawnProcess(control.python, boot ? ['-c', BOOT[boot], ...args] : [control.cli, ...args], {
       cwd: control.dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
@@ -268,7 +276,7 @@ export function createControl({ control = findControl(), env = process.env, run 
      * The explicit update step. These are the only calls that let Control reach the network: `acquire` removes
      * STRATA_NO_ACQUIRE for that one process. Starting, serving, listing and rolling back never do.
      */
-    async updateCheck({ feed = env.STRATA_UPDATE_FEED ?? null, appVersion = env.STRATA_APP_VERSION ?? null } = {}) {
+    async updateCheck({ feed = env.STRATA_PACKAGED === '1' ? null : env.STRATA_UPDATE_FEED ?? null, appVersion = env.STRATA_APP_VERSION ?? null } = {}) {
       /* One check at a time per question: Control's update lock lets one `update --check` in and refuses the rest ("another update is already running"). Two pages
          (the app window and a browser tab), the first-run card and Settings > About, or a press at the same moment as the first read each started their own
          check, and the one that lost the lock showed "couldn't read its download list" for good (0.2.16 N-A1, about 1 start in 8) or "another update is already
@@ -296,7 +304,7 @@ export function createControl({ control = findControl(), env = process.env, run 
       lastCheck = attempt;
       return attempt;
     },
-    async update({ feed = env.STRATA_UPDATE_FEED ?? null, engine = true, control: withControl = true, appVersion = env.STRATA_APP_VERSION ?? null, force = false, stopModel = false, onEvent = null, signal = null } = {}) {
+    async update({ feed = env.STRATA_PACKAGED === '1' ? null : env.STRATA_UPDATE_FEED ?? null, engine = true, control: withControl = true, appVersion = env.STRATA_APP_VERSION ?? null, force = false, stopModel = false, onEvent = null, signal = null } = {}) {
       const args = ['update', '--output', 'jsonl', ...feedArgs(feed), ...(engine ? [] : ['--no-engine']), ...(withControl ? [] : ['--no-control']),
         ...(appVersion ? ['--app-version', appVersion] : []), ...(force ? ['--force'] : []), ...(stopModel ? ['--stop-model'] : [])];
       const result = await call(args, { timeoutMs: 3 * 3600_000, acquire: true, onLine: onEvent ?? (() => {}), signal });

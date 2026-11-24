@@ -20,8 +20,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Read only by default; only the publish job below may write a release, and it runs no build code.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -36,8 +37,12 @@ jobs:
   windows-nvidia:
     runs-on: windows-2022
     timeout-minutes: 360
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Version
         id: version
@@ -50,15 +55,17 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "Strata $v"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '24'
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca  # stable
+        with:
+          toolchain: stable
 
       # Only the parts of the toolkit the engine and the picture reader need, from NVIDIA's own redist directory, each checked
       # against the SHA-256 in NVIDIA's manifest. (CUDA 13 splits crt and nvvm out of nvcc: without them nvcc cannot compile.)
@@ -92,9 +99,16 @@ jobs:
 
       - name: Ninja
         shell: pwsh
-        run: choco install ninja -y --no-progress
+        run: |
+          # ninja's own release, pinned by SHA-256 (no Chocolatey package in between)
+          $zip = Join-Path $env:RUNNER_TEMP 'ninja-win.zip'
+          Invoke-WebRequest 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip' -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65') { throw 'ninja: SHA-256 does not match' }
+          $dir = Join-Path $env:RUNNER_TEMP 'ninja'
+          Expand-Archive $zip -DestinationPath $dir -Force
+          $dir >> $env:GITHUB_PATH
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1
         with:
           arch: x64
 
@@ -208,20 +222,30 @@ jobs:
           $sums | Set-Content -Encoding utf8NoBOM dist/SHA256SUMS.txt
           Get-ChildItem dist | Format-Table Name, Length
 
-      - name: Keep the files (manual runs)
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
+      - name: Keep the files (manual runs; the publish job takes them from here for a tag)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: strata-fork-${{ steps.version.outputs.version }}-windows-nvidia
           path: dist/
           retention-days: 7
 
+  publish:
+    if: github.ref_type == 'tag'
+    needs: windows-nvidia
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: strata-fork-${{ needs.windows-nvidia.outputs.version }}-windows-nvidia
+          path: dist
+
       - name: Publish the release (tags)
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Strata-fork ${{ steps.version.outputs.version }} (Windows, NVIDIA RTX 20 series and newer)
+          name: Strata-fork ${{ needs.windows-nvidia.outputs.version }} (Windows, NVIDIA RTX 20 series and newer)
           make_latest: true
           files: dist/*
           body: |

@@ -1,7 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { nativeFixture, finishJob } from './helpers/native-fixture.mjs';
+
+test('desktop preparation and loading default to no thinking and preserve saved effort', async () => {
+  const f = nativeFixture();
+  try {
+    await f.control.refresh(true);
+    const run = async (action, model) => {
+      const job = await finishJob(f.control, f.control.operation(action, { model }).id);
+      assert.equal(job.state, 'done', job.error);
+      return job;
+    };
+    const config = join(f.repo, 'strata-iq2_xs.json');
+    const original = JSON.parse(await readFile(config, 'utf8'));
+    await run('install', 'iq2_xs');
+    assert.equal(JSON.parse(await readFile(config, 'utf8')).reasoning_effort, 'none');
+
+    const cases = [
+      { saved: original, effort: 'none' },
+      { saved: { ...original, reasoning_effort: 'high' }, effort: 'high' },
+      { saved: { ...original, args: [...original.args, '--reasoning-effort=medium'] }, effort: undefined },
+    ];
+    for (const { saved, effort } of cases) {
+      await writeFile(config, JSON.stringify(saved));
+      const job = await run('load', 'iq2_xs');
+      const runtime = join(f.directory, 'native-instances', `${job.result.instanceId}.json`);
+      const launched = JSON.parse(await readFile(runtime, 'utf8'));
+      assert.equal(launched.reasoning_effort, effort);
+      assert.equal(JSON.parse(await readFile(config, 'utf8')).reasoning_effort, effort);
+      if (effort === undefined) assert.ok(launched.args.includes('--reasoning-effort=medium'));
+    }
+  } finally { await f.cleanup(); }
+});
 
 test('a second model on a card another model uses still loads (recommend, never force); two cards, two models', async () => {
   const f = nativeFixture();

@@ -89,5 +89,11 @@
  "guic88": "Prompt intégré",
  "guic89": "Votre propre prompt",
  "guic90": "Ce prompt système est trop long. Raccourcissez-le à moins de 64 Ko, puis enregistrez de nouveau.",
- "guic91": "Le prompt système a été modifié dans une autre fenêtre. Fermez ceci et rouvrez-le pour voir la version la plus récente."
+ "guic91": "Le prompt système a été modifié dans une autre fenêtre. Fermez ceci et rouvrez-le pour voir la version la plus récente.",
+ "guic92": "Mode hors ligne",
+ "guic93": "Strata ne se connecte à rien en dehors de cet ordinateur : aucun téléchargement ni recherche de mise à jour. Le partage et le tunnel Cloudflare restent sous votre contrôle. Les téléchargements en cours ne sont pas arrêtés.",
+ "guic94": "Le mode hors ligne est activé. Désactivez-le dans Paramètres > À propos > Confidentialité, puis réessayez.",
+ "guic95": "Aucun moteur fonctionnel n’a été trouvé sur ce PC. Strata peut interroger github.com ; rien n’est téléchargé avant votre choix.",
+ "guic96": "Rechercher un moteur",
+ "guic97": "Ouvrez Strata à l’adresse 127.0.0.1 ou localhost."
 }
