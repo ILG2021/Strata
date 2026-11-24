@@ -136,7 +136,9 @@ jobs:
           Copy-Item $exe.FullName $stage
           & $exe.FullName --version
           if ($LASTEXITCODE) { Write-Host '::warning::strata-inkling.exe --version did not run on the build machine (no GPU driver here); the package is still checked below.' }
+          # --search replaces package_engine.py's own search folders (CUDA_PATH, PATH), so the toolkit's are named here too
           $search = @()
+          foreach ($d in "$env:CUDA_PATH\bin\x64", "$env:CUDA_PATH\bin") { if (Test-Path $d) { $search += '--search', $d } }
           if ($env:VCToolsRedistDir) {
             Get-ChildItem (Join-Path $env:VCToolsRedistDir 'x64') -Directory -Filter 'Microsoft.VC*.OpenMP' -ErrorAction SilentlyContinue | ForEach-Object { $search += '--search', $_.FullName }
           }
