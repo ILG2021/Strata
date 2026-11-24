@@ -868,6 +868,55 @@ add(en="Strata’s background part has stopped. Close Strata and open it again."
     ko="Strata의 백그라운드 부분이 중지되었습니다. Strata를 닫았다가 다시 여세요.",
     fr="La partie en arrière-plan de Strata s’est arrêtée. Fermez Strata et rouvrez-le.",
     he="החלק הפועל ברקע של Strata נעצר. יש לסגור את Strata ולפתוח אותו מחדש.")
+# Settings > General > System prompt: Strata's built-in prompt, shown and editable (fork feature, 2026-11-23).
+add(en="System prompt",
+    zh="系统提示词", ja="システムプロンプト", de="Systemprompt", es="Indicación del sistema", ru="Системный промпт",
+    pt="Prompt do sistema", ko="시스템 프롬프트", fr="Prompt système", he="הנחיית מערכת")
+add(en="The instructions every chat starts with, before your rules. Strata’s built-in prompt is used until you change it. New answers use it right away.",
+    zh="每个聊天开头的指令，位于你的规则之前。在你修改之前，使用 Strata 内置的提示词。新的回答会立即使用它。",
+    ja="すべてのチャットの最初に置かれる指示で、あなたのルールより前に入ります。変更するまでは Strata 内蔵のプロンプトが使われます。新しい回答からすぐに使われます。",
+    de="Die Anweisungen, mit denen jeder Chat beginnt, vor Ihren Regeln. Bis Sie ihn ändern, wird der eingebaute Prompt von Strata verwendet. Neue Antworten verwenden ihn sofort.",
+    es="Las instrucciones con las que empieza cada chat, antes de tus reglas. Se usa la indicación integrada de Strata hasta que la cambies. Las nuevas respuestas la usan de inmediato.",
+    ru="Инструкции, с которых начинается каждый чат, перед вашими правилами. Пока вы его не измените, используется встроенный промпт Strata. Новые ответы сразу его учитывают.",
+    pt="As instruções com que cada chat começa, antes das suas regras. O prompt embutido do Strata é usado até você alterá-lo. As novas respostas já o usam.",
+    ko="모든 채팅이 시작될 때 내 규칙보다 먼저 들어가는 지시입니다. 바꾸기 전까지는 Strata 기본 프롬프트가 사용됩니다. 새 답변부터 바로 적용됩니다.",
+    fr="Les instructions par lesquelles commence chaque conversation, avant vos règles. Le prompt intégré de Strata est utilisé tant que vous ne le modifiez pas. Les nouvelles réponses l'utilisent tout de suite.",
+    he="ההנחיות שבהן כל צ'אט מתחיל, לפני הכללים שלכם. עד שתשנו אותה, נעשה שימוש בהנחיה המובנית של Strata. תשובות חדשות משתמשות בה מיד.")
+add(en="Edit system prompt",
+    zh="编辑系统提示词", ja="システムプロンプトを編集", de="Systemprompt bearbeiten", es="Editar indicación del sistema", ru="Изменить системный промпт",
+    pt="Editar prompt do sistema", ko="시스템 프롬프트 편집", fr="Modifier le prompt système", he="עריכת הנחיית המערכת")
+add(en="Restore default",
+    zh="恢复默认", ja="既定に戻す", de="Standard wiederherstellen", es="Restaurar predeterminado", ru="Восстановить по умолчанию",
+    pt="Restaurar padrão", ko="기본값 복원", fr="Rétablir la valeur par défaut", he="שחזור ברירת המחדל")
+add(en="Save system prompt",
+    zh="保存系统提示词", ja="システムプロンプトを保存", de="Systemprompt speichern", es="Guardar indicación del sistema", ru="Сохранить системный промпт",
+    pt="Salvar prompt do sistema", ko="시스템 프롬프트 저장", fr="Enregistrer le prompt système", he="שמירת הנחיית המערכת")
+add(en="Built-in prompt",
+    zh="内置提示词", ja="内蔵プロンプト", de="Eingebauter Prompt", es="Indicación integrada", ru="Встроенный промпт",
+    pt="Prompt embutido", ko="기본 프롬프트", fr="Prompt intégré", he="הנחיה מובנית")
+add(en="Your own prompt",
+    zh="自定义提示词", ja="独自のプロンプト", de="Ihr eigener Prompt", es="Tu propia indicación", ru="Ваш собственный промпт",
+    pt="Seu próprio prompt", ko="내 프롬프트", fr="Votre propre prompt", he="ההנחיה שלכם")
+add(en="This system prompt is too long. Make it shorter than 64 KB, then save again.",
+    zh="这个系统提示词太长了。请缩短到 64 KB 以内，然后再保存。",
+    ja="システムプロンプトが長すぎます。64 KB 未満に短くしてから、もう一度保存してください。",
+    de="Dieser Systemprompt ist zu lang. Kürzen Sie ihn auf unter 64 KB und speichern Sie dann erneut.",
+    es="Esta indicación del sistema es demasiado larga. Acórtala a menos de 64 KB y vuelve a guardar.",
+    ru="Этот системный промпт слишком длинный. Сократите его до 64 КБ и сохраните снова.",
+    pt="Este prompt do sistema é longo demais. Deixe-o com menos de 64 KB e salve novamente.",
+    ko="시스템 프롬프트가 너무 깁니다. 64KB 미만으로 줄인 다음 다시 저장하세요.",
+    fr="Ce prompt système est trop long. Raccourcissez-le à moins de 64 Ko, puis enregistrez de nouveau.",
+    he="הנחיית המערכת ארוכה מדי. קצרו אותה לפחות מ-64 KB ושמרו שוב.")
+add(en="The system prompt was changed in another window. Close this and open it again to see the newest version.",
+    zh="系统提示词已在另一个窗口中被修改。请关闭此窗口并重新打开，以查看最新版本。",
+    ja="システムプロンプトは別のウィンドウで変更されました。これを閉じてもう一度開くと、最新の内容が表示されます。",
+    de="Der Systemprompt wurde in einem anderen Fenster geändert. Schließen Sie dies und öffnen Sie es erneut, um die neueste Fassung zu sehen.",
+    es="La indicación del sistema se cambió en otra ventana. Cierra esto y ábrelo de nuevo para ver la versión más reciente.",
+    ru="Системный промпт был изменён в другом окне. Закройте это окно и откройте снова, чтобы увидеть последнюю версию.",
+    pt="O prompt do sistema foi alterado em outra janela. Feche esta e abra de novo para ver a versão mais recente.",
+    ko="시스템 프롬프트가 다른 창에서 변경되었습니다. 이 창을 닫고 다시 열어 최신 버전을 확인하세요.",
+    fr="Le prompt système a été modifié dans une autre fenêtre. Fermez ceci et rouvrez-le pour voir la version la plus récente.",
+    he="הנחיית המערכת שונתה בחלון אחר. סגרו את החלון ופתחו אותו שוב כדי לראות את הגרסה העדכנית.")
 here = APP / "src" / "locales"
 NBSP = " "
 

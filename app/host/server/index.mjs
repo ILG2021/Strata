@@ -55,6 +55,7 @@ import { selectSkills, skillInstructions } from './skill-selection.mjs';
 import { prepareOversized } from './oversize.mjs';
 import { createChatFolders, chatRootOf, openFile, resolveChatFile, previewFile, rawFile, createAttachments } from './chat-files.mjs';
 import { createUserRules, rulesFile } from './user-rules.mjs';
+import { createSystemPrompt, systemPromptFile } from './system-prompt.mjs';
 import { checkUpdates, checkAppUpdates, engineFirstRun } from './updates.mjs';
 import { plainNoModel } from './no-model-text.mjs';
 import { createAppUi } from './app-ui.mjs';
@@ -356,9 +357,7 @@ const execFileAsync = promisify(execFile);
    What Strata puts in front of every conversation. Counted so the context
    breakdown can show where the window actually goes rather than reporting a
    single opaque total. */
-const SYSTEM_PROMPT = `You are Strata, a local inference assistant running entirely on this computer.
-Answer plainly and briefly. Use only tools actually offered to you. Ask for file content when no file tool is available.
-Say when you do not know. Never claim to have done something you have not done.`;
+// Strata's own prompt lives in system-prompt.mjs: the built-in text, or the person's own from Settings > System prompt.
 
 /**
  * Files a tool proposal could plausibly name.
@@ -420,6 +419,7 @@ try { uploads.sweep(); } catch { /* best effort */ }
 const chatFolders = createChatFolders({ file: join(store.DATA_DIR, 'chat-folders.json') });
 /* The person's own rules for every answer (#5084), added to the chat's prompt. */
 const userRules = createUserRules({ file: rulesFile(store.DATA_DIR) });
+const systemPrompt = createSystemPrompt({ file: systemPromptFile(store.DATA_DIR) });
 /** Where a chat's files are: its chosen folder, else the default workspace (chat-files.mjs). One source for every file route. */
 const chatRoot = chatId => chatRootOf({ chosen: chatFolders.get(chatId), fallback: workspaces[0]?.path ?? WORKSPACE });
 
@@ -486,7 +486,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
   if(native.hasLive()||nativeModelId){
     let instance;try{instance=native.resolveInstance(nativeModelId??native.state().defaultId);}catch(e){const message=plainNoModel(e.message);onFrame({type:'error',message});return {error:message};}const started=Date.now(),cancel=new AbortController();
     const entry=serving.open({client:client??'Strata chat',endpoint:'/chat/completions',model:instance.apiModelId,instanceId:instance.id,gpuIds:instance.gpus.map(String),cancel:()=>cancel.abort()});
-    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const hy4Local=/^hy4-flash/i.test(String(instance.model??instance.apiModelId??''));const inklingLocal=/^inkling-2-mini/i.test(String(instance.model??instance.apiModelId??''));const effortWord=hy4Local?({off:'none',minimal:'high',low:'high',medium:'high',high:'high',max:'max'}[String(thinking).toLowerCase()]??'high'):inklingLocal?'none':({off:'none',max:'high'}[String(thinking).toLowerCase()]??String(thinking).toLowerCase());const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message,history,images,extra:{...(!inklingLocal&&thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:effortWord},systemPrompt:[SYSTEM_PROMPT,userRules.promptBlock(),skillInstructions(applied)].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
+    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const hy4Local=/^hy4-flash/i.test(String(instance.model??instance.apiModelId??''));const inklingLocal=/^inkling-2-mini/i.test(String(instance.model??instance.apiModelId??''));const effortWord=hy4Local?({off:'none',minimal:'high',low:'high',medium:'high',high:'high',max:'max'}[String(thinking).toLowerCase()]??'high'):inklingLocal?'none':({off:'none',max:'high'}[String(thinking).toLowerCase()]??String(thinking).toLowerCase());const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message,history,images,extra:{...(!inklingLocal&&thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:effortWord},systemPrompt:[systemPrompt.current(),userRules.promptBlock(),skillInstructions(applied)].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
   }
   runtimeState();
   let instance;
@@ -516,7 +516,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
       // Scope is resolved again at dispatch: a disabled skill never stays active
       // merely because the request waited in the queue.
       const appliedSkills = selectSkills(skillState, message, workspaceId);
-      const systemPrompt = [SYSTEM_PROMPT, userRules.promptBlock(), skillInstructions(appliedSkills)].filter(Boolean).join('\n\n');
+      const chatPrompt = [systemPrompt.current(), userRules.promptBlock(), skillInstructions(appliedSkills)].filter(Boolean).join('\n\n');
       serving.mark(entry.id, { state: 'generating' });
       const contextMax = instance.memory.context;
       const modelMonitor=models.REAL?monitor:{
@@ -530,7 +530,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
         result = await streamChat({
           message,
           history,
-          systemPrompt,
+          systemPrompt: chatPrompt,
           modelLabel: v.label,
           candidates: readableCandidates(),
           onFrame: (frame) => {
@@ -1297,6 +1297,13 @@ async function api(req, res, path, method, url) {
       return json(res, 200, { path: rel, binary: true, sizeKb: st.size / 1024, text: '' });
     }
     return json(res, 200, { path: rel, text, sizeKb: st.size / 1024, updatedAt: st.mtime.toISOString() });
+  }
+
+  // Strata's system prompt: the built-in text until the person saves their own. A save names the revision it read.
+  if (path === '/api/system-prompt' && method === 'GET') return json(res, 200, systemPrompt.read());
+  if (path === '/api/system-prompt' && method === 'PUT') {
+    const body = await readBody(req);
+    try { return json(res, 200, systemPrompt.write(body.text, body.revision)); } catch (e) { return error(res, e.status ?? 400, e.message, e.code ? { code: e.code } : {}); }
   }
 
   // The person's own rules for every answer (#5084). A save names the revision it read; another window's newer save is never overwritten.

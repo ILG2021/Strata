@@ -12,6 +12,8 @@ name: Desktop release (Windows, NVIDIA)
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password (empty if it has none)
 #
 # Nothing here needs the feed key: the engine and Control ship inside the installer, and the app updates only through Tauri.
+# The fork publishes no update feed, so the engines of models that run on a program of their own ship inside the installer too:
+# Inkling-2-Mini's strata-inkling goes in engine-bundle/shapes/inkling2/ and the app puts it where Control looks on first start.
 
 on:
   push:
@@ -104,6 +106,8 @@ jobs:
         env:
           BUILD_JOBS: '3'
           OUT: ${{ runner.temp }}\engine-out
+          # the Inkling engine (built from the same tree in the next step) reads its own arch list: plain numbers, so sm_120 gets sm_120a FP4 code
+          STRATA_CMAKE_EXTRA: -DSTRATA_INK_CUDA_ARCHS=${{ env.ARCHS }}
         run: |
           python tools/packaging/build_cuda_windows.py cuda13
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -111,6 +115,46 @@ jobs:
           if (-not $pkg) { throw 'The engine build made no package folder.' }
           Copy-Item $pkg.FullName (Join-Path 'app/desktop/src-tauri/resources/engine-bundle' $pkg.Name) -Recurse
           Write-Host "bundled engine: $($pkg.Name)"
+
+      # strata-inkling: Inkling-2-Mini's own engine program (engine/src/inkling2, component strata-inkling). Built in the engine's build tree,
+      # packaged as the shape engine inkling2 (package_engine.py --shape: the CUDA DLLs it imports are copied in, and the OpenMP runtime
+      # from the VC redist folder), checked, and bundled under engine-bundle/shapes/inkling2 (app/host/server/bundled-engine.mjs).
+      - name: Inkling-2-Mini engine (CUDA 13)
+        shell: pwsh
+        env:
+          OUT: ${{ runner.temp }}\inkling-out
+        run: |
+          $build = 'build-win-cuda13'
+          cmake --build $build -j 3 --target strata-inkling
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $exe = Get-ChildItem $build -Recurse -Filter 'strata-inkling.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'The build made no strata-inkling.exe.' }
+          $ver = (Select-String -Path engine/src/inkling2/ink_main.cpp -Pattern '#define INKLING_VERSION "(.+)"').Matches[0].Groups[1].Value
+          if (-not $ver) { throw 'No INKLING_VERSION in engine/src/inkling2/ink_main.cpp.' }
+          $stage = Join-Path $env:RUNNER_TEMP 'inkling-stage'
+          New-Item -ItemType Directory -Force $stage, $env:OUT | Out-Null
+          Copy-Item $exe.FullName $stage
+          & $exe.FullName --version
+          if ($LASTEXITCODE) { Write-Host '::warning::strata-inkling.exe --version did not run on the build machine (no GPU driver here); the package is still checked below.' }
+          $search = @()
+          if ($env:VCToolsRedistDir) {
+            Get-ChildItem (Join-Path $env:VCToolsRedistDir 'x64') -Directory -Filter 'Microsoft.VC*.OpenMP' -ErrorAction SilentlyContinue | ForEach-Object { $search += '--search', $_.FullName }
+          }
+          $archs = $env:ARCHS -split ';' | ForEach-Object { '--arch', "sm_$_" }
+          $commit = (git rev-parse HEAD).Substring(0, 12)
+          python tools/packaging/package_engine.py --src $stage --backend cuda --version $ver --out $env:OUT --shape inkling2 `
+            @archs --arch "compute_$(($env:ARCHS -split ';')[-1])" --min-driver nvidia=580.65 --variant cuda13 --platform windows-x86_64 `
+            --build-id "$commit+cuda$env:CUDA_VERSION" @search
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $pkg = Join-Path $env:OUT "$ver-windows-x86_64-cuda-cuda13"
+          python tools/packaging/package_engine.py --verify $pkg
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tools/packaging/binary_deps.py $pkg
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $dest = 'app/desktop/src-tauri/resources/engine-bundle/shapes/inkling2'
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          Copy-Item $pkg (Join-Path $dest (Split-Path $pkg -Leaf)) -Recurse
+          Write-Host "bundled Inkling-2-Mini engine: $(Split-Path $pkg -Leaf)"
 
       - name: Control (pinned Python and hash-locked wheels)
         shell: pwsh

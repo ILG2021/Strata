@@ -80,5 +80,14 @@
  "guic79": "Zuletzt: {0} Token",
  "guic80": "Strata konnte seine Downloadliste nicht lesen und kann deshalb noch keine Engine auswählen. Klicken Sie auf „Erneut versuchen“ oder wählen Sie unten eine andere Möglichkeit.",
  "guic81": "Aufgaben laufen auf einem Modell, das auf diesem Computer geladen ist. Laden Sie unter Modelle eines.",
- "guic82": "Der Hintergrundteil von Strata wurde beendet. Schließen Sie Strata und öffnen Sie es erneut."
+ "guic82": "Der Hintergrundteil von Strata wurde beendet. Schließen Sie Strata und öffnen Sie es erneut.",
+ "guic83": "Systemprompt",
+ "guic84": "Die Anweisungen, mit denen jeder Chat beginnt, vor Ihren Regeln. Bis Sie ihn ändern, wird der eingebaute Prompt von Strata verwendet. Neue Antworten verwenden ihn sofort.",
+ "guic85": "Systemprompt bearbeiten",
+ "guic86": "Standard wiederherstellen",
+ "guic87": "Systemprompt speichern",
+ "guic88": "Eingebauter Prompt",
+ "guic89": "Ihr eigener Prompt",
+ "guic90": "Dieser Systemprompt ist zu lang. Kürzen Sie ihn auf unter 64 KB und speichern Sie dann erneut.",
+ "guic91": "Der Systemprompt wurde in einem anderen Fenster geändert. Schließen Sie dies und öffnen Sie es erneut, um die neueste Fassung zu sehen."
 }

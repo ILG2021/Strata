@@ -80,5 +80,14 @@
  "guic79": "Last: {0} tokens",
  "guic80": "Strata couldn’t read its download list, so it can’t pick an engine yet. Press Try again, or choose another way below.",
  "guic81": "Tasks run on a model loaded on this computer. Load one in Models.",
- "guic82": "Strata’s background part has stopped. Close Strata and open it again."
+ "guic82": "Strata’s background part has stopped. Close Strata and open it again.",
+ "guic83": "System prompt",
+ "guic84": "The instructions every chat starts with, before your rules. Strata’s built-in prompt is used until you change it. New answers use it right away.",
+ "guic85": "Edit system prompt",
+ "guic86": "Restore default",
+ "guic87": "Save system prompt",
+ "guic88": "Built-in prompt",
+ "guic89": "Your own prompt",
+ "guic90": "This system prompt is too long. Make it shorter than 64 KB, then save again.",
+ "guic91": "The system prompt was changed in another window. Close this and open it again to see the newest version."
 }

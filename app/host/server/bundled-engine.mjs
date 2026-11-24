@@ -8,6 +8,10 @@
  * An installed engine of the same version or newer is never touched; a damaged copy of the very same package is repaired.
  * The copy is made under a hidden temporary name and renamed into place, so an interrupted run leaves nothing half-installed
  * (the next start removes the leftover and tries again).
+ *
+ * The engines of model shapes that run on a program of their own (Inkling-2-Mini's strata-inkling, ...) can ship in the same installer, under
+ * <install>/engine-bundle/shapes/<shape>/<package folder> (package_engine.py --shape). Each goes to <components>/shapes/<shape>/engine/<folder>,
+ * where Control's shape_engine.find() looks, by the same rules. The fork publishes no update feed, so this is how such a model gets its engine.
  */
 import { createReadStream, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -24,10 +28,18 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-async function readManifest(folder) {
+const SHAPE_DIR = 'shapes';
+const SHAPE_RE = /^[a-z][a-z0-9_]{1,21}[a-z0-9]$/;
+/** A shape's component id, as strata_control/shape_engine.component_id names it. */
+export function shapeComponentId(shape) {
+  if (shape === 'inkling2') return 'strata-inkling';
+  return `strata-${String(shape).replace(/_/g, '-')}`;
+}
+
+async function readManifest(folder, id = 'strata-engine') {
   try {
     const data = JSON.parse((await readFile(join(folder, MANIFEST), 'utf8')).replace(/^﻿/, ''));
-    if (!data || data.id !== 'strata-engine' || typeof data.version !== 'string' || typeof data.platform !== 'string' || typeof data.backend !== 'string') return null;
+    if (!data || data.id !== id || typeof data.version !== 'string' || typeof data.platform !== 'string' || typeof data.backend !== 'string') return null;
     if (!Array.isArray(data.files) || !data.files.length || typeof data.entrypoint !== 'string') return null;
     return data;
   } catch { return null; }
@@ -162,10 +174,124 @@ export async function packageIsWhole(folder, manifest, { deep = false } = {}) {
 }
 
 /**
- * Install the bundled engine when it is needed.
- * Returns { action: 'installed' | 'repaired' | 'kept' | 'none' | 'refused', folder?, version?, reason? }; never throws.
+ * Install the bundled engine (and the bundled engines of model shapes) when they are needed.
+ * Returns { action: 'installed' | 'repaired' | 'kept' | 'none' | 'refused' | 'wrong-make', folder?, version?, reason?, shapes? } for the Strata
+ * engine, with `shapes` listing one { shape, action, ... } per bundled shape engine; never throws.
  */
 export async function installBundledEngine({ bundleDir, components, platform = null, log = () => {}, driver = undefined, backend = undefined } = {}) {
+  if (!bundleDir || !components || !existsSync(bundleDir)) return { action: 'none' };
+  let wantedList = [];
+  try { wantedList = backend === undefined ? gpuBackendsHere() : (Array.isArray(backend) ? backend : backend ? [backend] : []); } catch { wantedList = []; }
+  const main = await installMainEngine({ bundleDir, components, platform, log, driver, backend: wantedList });
+  if (main.action === 'wrong-make') return main;
+  const shapes = await installBundledShapes({ bundleDir, components, platform, log, backend: wantedList });
+  return shapes.length ? { ...main, shapes } : main;
+}
+
+/** Copy one checked package into `root/<name>` under a hidden temporary name, then rename it into place. Throws on any problem. */
+async function copyPackage(source, manifest, root, name, repair) {
+  await mkdir(root, { recursive: true });
+  const temp = join(root, `.bundle-${name}.tmp`);
+  await rm(temp, { recursive: true, force: true });
+  try {
+    await mkdir(temp, { recursive: true });
+    for (const item of [...manifest.files.map(f => f.path), MANIFEST]) {
+      const rel = plainRelative(item).split('/');
+      const target = join(temp, ...rel);
+      if (!resolve(target).startsWith(resolve(temp) + sep)) throw new Error('a path leaves the package');
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(join(source, ...rel), target);
+    }
+    if (!(await packageIsWhole(temp, manifest, { deep: true }))) throw new Error('the copy does not match the manifest');
+    const finalFolder = join(root, name);
+    if (repair) await rm(finalFolder, { recursive: true, force: true });
+    await rename(temp, finalFolder);
+    return finalFolder;
+  } catch (error) {
+    await rm(temp, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+/** The shape packages in the bundle: [{ shape, name, folder, manifest }], unreadable ones left out. */
+async function bundledShapePackages(bundleDir) {
+  const found = [];
+  const base = join(bundleDir, SHAPE_DIR);
+  if (!existsSync(base)) return found;
+  for (const shapeEntry of await readdir(base, { withFileTypes: true })) {
+    if (!shapeEntry.isDirectory() || !SHAPE_RE.test(shapeEntry.name)) continue;
+    const shape = shapeEntry.name;
+    for (const entry of await readdir(join(base, shape), { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const folder = join(base, shape, entry.name);
+      const manifest = await readManifest(folder, shapeComponentId(shape));
+      if (manifest && manifest.shape === shape) found.push({ shape, name: entry.name, folder, manifest });
+    }
+  }
+  return found;
+}
+
+/**
+ * The engines of model shapes inside the installer, each put in <components>/shapes/<shape>/engine/<folder> when this PC has none of the same
+ * platform and backend, or only an older one (a damaged copy of the same package is repaired). A build for a make of card this PC does not have
+ * is left alone. Returns one result per shape and variant; never throws.
+ */
+export async function installBundledShapes({ bundleDir, components, platform = null, log = () => {}, backend = [] } = {}) {
+  const results = [];
+  try {
+    if (!bundleDir || !components || !existsSync(bundleDir)) return results;
+    let packages = await bundledShapePackages(bundleDir);
+    if (platform) packages = packages.filter(p => p.manifest.platform === platform);
+    const wanted = (Array.isArray(backend) ? backend : [backend]).filter(Boolean);
+    if (wanted.length) packages = packages.filter(p => !['cuda', 'hip', 'sycl'].includes(p.manifest.backend) || wanted.includes(p.manifest.backend));
+    packages.sort((a, b) => compareVersions(b.manifest.version, a.manifest.version));
+    const done = new Set();
+    for (const { shape, name, folder, manifest } of packages) {
+      const key = `${shape}/${variantOf(manifest)}`;
+      if (done.has(key)) continue;
+      done.add(key);
+      if (!/^[\w.+-]+$/.test(name)) { results.push({ shape, action: 'refused', reason: 'the package folder name is not plain' }); continue; }
+      const root = join(components, SHAPE_DIR, shape, 'engine');
+      const id = shapeComponentId(shape);
+      let newestInstalled = null, sameFolder = null;
+      try {
+        for (const entry of await readdir(root, { withFileTypes: true })) {
+          if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+          const installed = await readManifest(join(root, entry.name), id);
+          if (!installed || variantOf(installed) !== variantOf(manifest)) continue;
+          if (entry.name === name) sameFolder = installed;
+          if (!newestInstalled || compareVersions(installed.version, newestInstalled.version) > 0) newestInstalled = installed;
+        }
+      } catch { /* no engine of this shape yet */ }
+      let repair = false;
+      if (newestInstalled && compareVersions(newestInstalled.version, manifest.version) >= 0) {
+        if (sameFolder && !(await packageIsWhole(join(root, name), sameFolder))) repair = true;
+        else { results.push({ shape, action: 'kept', version: newestInstalled.version }); continue; }
+      }
+      if (!(await packageIsWhole(folder, manifest, { deep: true }))) {
+        const reason = 'the engine inside the installer does not match its manifest';
+        log(`bundled ${shape} engine ${name}: ${reason}`);
+        results.push({ shape, action: 'refused', reason });
+        continue;
+      }
+      try {
+        const placed = await copyPackage(folder, manifest, root, name, repair);
+        const action = repair ? 'repaired' : 'installed';
+        log(`bundled ${shape} engine ${name}: ${action}`);
+        results.push({ shape, action, folder: placed, version: manifest.version });
+      } catch (error) {
+        const reason = error?.message ?? String(error);
+        log(`bundled ${shape} engine ${name}: ${reason}`);
+        results.push({ shape, action: 'refused', reason });
+      }
+    }
+  } catch (error) {
+    results.push({ shape: null, action: 'refused', reason: error?.message ?? String(error) });
+  }
+  return results;
+}
+
+async function installMainEngine({ bundleDir, components, platform = null, log = () => {}, driver = undefined, backend = undefined } = {}) {
   try {
     if (!bundleDir || !components || !existsSync(bundleDir)) return { action: 'none' };
     let packages = [];
@@ -280,7 +406,7 @@ export async function removeVerifiedBundle({ bundleDir, components, log = () => 
     if (process.platform === 'darwin' && resolve(bundleDir).split(sep).some(part => part.toLowerCase().endsWith('.app'))) return keepBundle(log, 'macOS app bundles must remain unchanged after signing');
     const packages = [];
     for (const entry of await readdir(bundleDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory() || entry.name === SHAPE_DIR) continue;
       const folder = join(bundleDir, entry.name);
       const manifest = await readManifest(folder);
       packages.push({ folder, manifest, name: entry.name });
@@ -299,7 +425,15 @@ export async function removeVerifiedBundle({ bundleDir, components, log = () => 
       }
       if (!found) return keepBundle(log, `${pkg.name} is not (or not completely) in the engine store`);
     }
+    const shapePackages = await bundledShapePackages(bundleDir);
+    for (const pkg of shapePackages) {
+      const root = join(components, SHAPE_DIR, pkg.shape, 'engine');
+      const theirs = await readManifest(join(root, pkg.name), shapeComponentId(pkg.shape));
+      const same = theirs && theirs.version === pkg.manifest.version && (theirs.build_id ?? '') === (pkg.manifest.build_id ?? '');
+      if (!same || !(await packageIsWhole(join(root, pkg.name), pkg.manifest, { deep: true }))) return keepBundle(log, `the ${pkg.shape} engine ${pkg.name} is not (or not completely) in the engine store`);
+    }
     for (const pkg of packages) await rm(pkg.folder, { recursive: true, force: true });
+    if (shapePackages.length) await rm(join(bundleDir, SHAPE_DIR), { recursive: true, force: true });
     log(`engine bundle: the copy that came with the installer (${packages.map(p => p.name).join(', ')}) was removed; the same engine is complete in the engine store`);
     return { removed: true, packages: packages.length };
   } catch (error) {
