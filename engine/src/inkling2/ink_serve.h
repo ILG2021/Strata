@@ -512,6 +512,9 @@ inline int run_serve_loop(const ServeConfig& cfg, InkModelFile& mf, InkBackend& 
     // steps: the smoothed tokens per step / (spec step ms / plain step ms) below 0.93 turns drafting off for 40 plain steps, then it probes again. The plain step
     // time is measured on the first 4 decode steps of the first request and refreshed by every plain step after that.
     const bool spec_adapt = (spec_env && std::string(spec_env) == "adapt") || cfg.bopts.spec_adapt;
+    // STRATA_INK_SPEC_GREEDY=1: only greedy requests without penalties draft (the rule of the Qwen3.6 engine's MTP); the others decode plain.
+    const char* spec_greedy_env = std::getenv("STRATA_INK_SPEC_GREEDY");
+    const bool spec_greedy_only = spec_greedy_env && *spec_greedy_env && std::string(spec_greedy_env) != "0";
     double gov_t_plain = 0.0, gov_t_spec = 0.0;
     // one speculative step (the greedy tree step or the sampled block step) took `ms` and produced `n_emit` tokens
     auto gov_step = [&](ActiveReq& rq, int n_emit, double ms) {
@@ -877,6 +880,7 @@ inline int run_serve_loop(const ServeConfig& cfg, InkModelFile& mf, InkBackend& 
         if (use_dspark && n_active == 1 && reqs[sole_slot].prefill_pos >= reqs[sole_slot].prompt_len &&
             reqs[sole_slot].generated + 2 <= reqs[sole_slot].max_new &&
             reqs[sole_slot].cur_pos + 8 < eff_max_ctx &&
+            (!spec_greedy_only || (reqs[sole_slot].s.greedy() && !reqs[sole_slot].s.penalties())) &&
             !(spec_adapt && (reqs[sole_slot].gov_plain_left > 0 || reqs[sole_slot].gov_calib_left > 0))) {
             auto& rq = reqs[sole_slot];
             // 2a. Zero-D2H fused greedy Beam Tree speculative step (when greedy, no penalties, and headroom >= 12)

@@ -854,7 +854,7 @@ async function api(req, res, path, method, url) {
    lines.push('','== Operations ==');for(const j of native.state().jobs)lines.push(`${j.startedAt} ${j.kind} ${j.state}${j.error?`: ${j.error}`:''}${j.details?`${NL}  ${j.details}`:''}`);
    try{const logs=join(dirname(componentsDirectory()),'logs');const names=readdirSync(logs).filter(n=>/^desktop-.*\.log$/.test(n)).sort();const crash=names.filter(n=>n.startsWith('desktop-crash-')).slice(-3).reverse();const runs=names.filter(n=>!n.startsWith('desktop-crash-')).slice(-2).reverse();lines.push('',`== Desktop shell: window crash logs (${crash.length} newest) ==`);for(const n of crash)lines.push('',`-- ${n}`,readFileSync(join(logs,n),'utf8'));lines.push('',`== Desktop shell: last lines of the newest ${runs.length} run logs ==`);for(const n of runs)lines.push('',`-- ${n}`,...readFileSync(join(logs,n),'utf8').split(NL).slice(-300));}catch{/* no desktop logs (not the Linux app, or no crash) */}
    try{const runtime=process.env.STRATA_RUNTIME_DIR??join(dirname(componentsDirectory()),'runtime');for(const name of readdirSync(runtime).filter(n=>n.endsWith('.server.log'))){lines.push('',`== ${name} (last lines) ==`,...readFileSync(join(runtime,name),'utf8').split(NL).slice(-200));}}catch{/* no server logs yet */}
-   const folder=join(process.env.USERPROFILE??process.env.HOME??homedir(),'Downloads');mkdirSync(folder,{recursive:true});
+   const folder=process.env.STRATA_EXPORT_DIR||join(process.env.USERPROFILE??process.env.HOME??homedir(),'Downloads');mkdirSync(folder,{recursive:true});
    const file=join(folder,`strata-diagnostics-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.txt`);writeFileSync(file,lines.join(NL),'utf8');
    return json(res,200,{path:file});}
   if(path==='/api/native/local/preview'&&method==='POST'){
@@ -1133,6 +1133,7 @@ async function api(req, res, path, method, url) {
   }
   if (path === '/api/storage/models-directory' && method === 'POST') {
     const body = await readBody(req);
+    if (store.MODELS_FIXED) return error(res, 409, 'Models are kept in the models folder of the Strata installation.');
     let directory;
     try { directory = store.validateModelsDirectory(body.directory); }
     catch (err) { return error(res, 400, err.message); }

@@ -29,7 +29,7 @@ class TemplateTests(unittest.TestCase):
     text = TEMPLATE.read_text(encoding="utf-8")
 
     def test_the_default_folder_is_programs_strata_and_the_data_folder_is_never_remembered_as_the_app(self):
-        self.assertIn(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}"', self.text)
+        self.assertIn(r'StrCpy $INSTDIR "$INSTDIR\${PRODUCTNAME}"', self.text)
         self.assertIn(r'StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0', self.text)
         self.assertIn("StrIsUnder", self.text)          # a remembered folder under Temp is ignored too
 
@@ -110,32 +110,6 @@ class MigrationTests(unittest.TestCase):
             self.assertFalse((old / "strata-desktop.exe").exists())
 
 
-    def test_the_uninstaller_stops_only_the_processes_started_from_the_install_folder(self):
-        ping = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "PING.EXE"
-        if not ping.is_file():
-            self.skipTest("no PING.EXE to stand in for a running Strata process")
-        with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
-            inst, other = base / "Programs" / "Strata", base / "Elsewhere"
-            for folder in (inst / "node", other):
-                folder.mkdir(parents=True)
-            mine = inst / "node" / "node.exe"
-            theirs = other / "node.exe"
-            for target in (mine, theirs):
-                target.write_bytes(ping.read_bytes())
-            procs = [subprocess.Popen([str(p), "-t", "127.0.0.1"], stdout=subprocess.DEVNULL) for p in (mine, theirs)]
-            try:
-                self.run_nsis(f'!insertmacro StrataStopOwnProcesses "{inst}"', base)
-                procs[0].wait(timeout=20)
-                self.assertIsNotNone(procs[0].poll(), "the process from the install folder was stopped")
-                self.assertIsNone(procs[1].poll(), "a process of the same name elsewhere is left running")
-            finally:
-                for proc in procs:
-                    if proc.poll() is None:
-                        proc.kill()
-                    proc.wait()
-
-
     def test_files_the_app_made_in_its_own_folders_are_removed_and_the_data_beside_them_is_not(self):
         """Strix, standard user: after the app had run, Python bytecode caches under control\\ kept the program folder alive."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -159,6 +133,11 @@ class MigrationTests(unittest.TestCase):
 
 
 class StopOrderTests(unittest.TestCase):
+    def test_no_hidden_script_runs(self):
+        text = TEMPLATE.read_text(encoding="utf-8")
+        self.assertNotIn("nsExec", text)
+        self.assertNotIn("ExecutionPolicy", text)
+
     def test_the_uninstaller_stops_them_before_it_removes_files(self):
         text = TEMPLATE.read_text(encoding="utf-8")
         uninstall = text[text.index("Section Uninstall"):]

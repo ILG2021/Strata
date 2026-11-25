@@ -713,6 +713,8 @@ def openai_to_messages(req: dict) -> tuple[list[dict], list[dict] | None, dict]:
             kwargs = {"enable_thinking": False}
         elif k in ("reasoning_effort", "thinking_mode") and "enable_thinking" not in kwargs:
             kwargs.update(effort_kwargs(v))
+    if isinstance(ctk.get("preserve_thinking"), bool):
+        kwargs["preserve_thinking"] = ctk["preserve_thinking"]
     return _env_to_user(_late_system_to_user(messages)), tools, kwargs
 
 

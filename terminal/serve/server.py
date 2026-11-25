@@ -4016,6 +4016,7 @@ def child_env(cfg: dict, *, offline: bool = False) -> dict:
     elif gpu_list(cfg):                              # issue #51: the GPU(s) to run on, numbered as nvidia-smi does; CUDA's
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"      # own default order (fastest first) can number the cards otherwise
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in ordered_gpus(cfg))
+    env.update(inkling_kind.greedy_only_env(cfg))
     for k, v in (cfg.get("env") or {}).items():      # engine settings the config carries (AMD: the GEMM tuning table)
         env[str(k)] = str(v)
     # #6497: honor an explicit CPU thread cap (`--pool-workers N` or `threads`) in OpenMP/BLAS runtimes too unless
@@ -4182,6 +4183,8 @@ class Service:
         self.codex_compaction_cache = False           # #924 (opt-in): a Codex compaction is rendered with its conversation's tools
         self.codex_thread_titles = False              # #923 (opt-in): answer Codex's thread-title turns without the engine
         self.sampling_defaults = dict(sampling_defaults or {})   # the run config's `sampling` block
+        from serve.kept_thinking import KeptThinking
+        self.kept_thinking = KeptThinking()           # Qwen3.6 with tools: see keeps_thinking
         self.model_arch = None                        # the config's family ("qwen4exp", "qwen35moe"): None = no model-card defaults
         self.shared = {}                              # the web app's Chat settings for every client (POST /settings)
         self.shared_path = None                       # where they are kept between starts (next to the config)
@@ -5413,6 +5416,10 @@ class Service:
                 "ram": {"used_gib": scaled(hw.get("ram_used"), 2 ** 30, 1),
                         "total_gib": scaled(hw.get("ram_total"), 2 ** 30, 1)} if hw.get("ram_total") else None}}
 
+    def keeps_thinking(self, tools, kwargs) -> bool:
+        """Are earlier replies rendered with their thinking (Qwen3.6, a request with tools, not refused by the request)?"""
+        return bool(tools) and getattr(self, "model_arch", None) == "qwen35moe" and kwargs.get("preserve_thinking") is not False
+
     def render_prompt(self, messages, tools, kwargs) -> str:
         """The template rendered.  #458: with `effort_end`, a request with a non-default effort (low, medium or no
         thinking) is rendered as a default one up to the answer - the same prompt start, so the conversation cache
@@ -5425,6 +5432,11 @@ class Service:
             on = bool(tk["enable_thinking"])
             rendered = self.template.render(inkling_dialect.prepare_messages(messages, has_tools=bool(tools), thinking=on), tools=tools, **tk)
             return inkling_dialect.finish_prompt(rendered, has_tools=bool(tools), thinking=on)
+        if tools and "preserve_thinking" not in kwargs and self.keeps_thinking(tools, kwargs):
+            # Qwen3.6 with tools (a coding client): its template drops the thinking of earlier turns at every new question, which rewrites
+            # the history and loses the conversation cache. Kept, each prompt starts with the one before. A request or
+            # chat_template_kwargs that says otherwise wins.
+            kwargs = {**kwargs, "preserve_thinking": True}
         effort = kwargs.get("reasoning_effort")
         off = kwargs.get("enable_thinking") is False
         if not self.effort_end or (not off and effort in (None, "", "xhigh", "high")):
@@ -5444,15 +5456,22 @@ class Service:
         A control token's text (<|im_start|>, <|im_end|>, <|endoftext|>, ...) inside a message is text as well: only
         the control tokens the template writes are control tokens.  `store=False` (a token count) reuses the kept
         prompts without adding or replacing one."""
+        kept = getattr(self, "kept_thinking", None) if self.keeps_thinking(tools, kwargs) else None
+        if kept is not None:                    # a client that does not send the thinking back: the cache holds it, so the prompt does too
+            messages = kept.fill(messages)
         marked, marked_tools, changed = mark_think_literals(messages, tools, self.literals)
         prompt = self.render_prompt(marked, marked_tools, kwargs)
         plain = ()
         if changed:
             prompt, plain = unmark_think_literals(prompt, self.literals)
         if self.prompts is not None:            # #567: only what follows the last special shared with a recent prompt
-            return self.prompts.encode(prompt, plain, store)
-        return self.tok.encode(prompt, parse_special=True, plain=plain) if plain else \
-            self.tok.encode(prompt, parse_special=True)
+            ids = self.prompts.encode(prompt, plain, store)
+        else:
+            ids = self.tok.encode(prompt, parse_special=True, plain=plain) if plain else \
+                self.tok.encode(prompt, parse_special=True)
+        if kept is not None and store:
+            kept.asked(ids, messages)
+        return ids
 
     @contextlib.contextmanager
     def _turn(self, cancel=None):
@@ -5850,7 +5869,9 @@ class Service:
                 gate.acquire(getattr(cancel, "_strata_key", None), cancel=cancel,
                              deadline=None if self.queue_timeout_s is None else time.monotonic() + self.queue_timeout_s)
                 counted = True
-            yield from self._run(ids, thinking, tools, max_new, sampling, cancel, force, declared_only, deferred)
+            events = self._run(ids, thinking, tools, max_new, sampling, cancel, force, declared_only, deferred)
+            kept = getattr(self, "kept_thinking", None)
+            yield from events if kept is None else kept.watch(ids, events)
         finally:
             if counted:
                 gate.release(getattr(cancel, "_strata_key", None))

@@ -505,6 +505,31 @@ fn host_command(res: &Path, port: u16, shutdown_token: &str) -> Result<Command, 
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+    // The installed app keeps everything inside its own folder. A variable the person set themselves (a custom launcher) wins.
+    if let Some(root) = desktoplog::install_root() {
+        let data = desktoplog::data_dir();
+        for (name, path) in [
+            ("STRATA_HOME", data.join("app")),
+            ("STRATA_COMPONENTS_DIR", data.join("components")),
+            ("STRATA_TERMINAL_SETTINGS_FILE", data.join("terminal-settings.json")),
+            ("STRATA_PROFILE_DIR", data.join("profiles")),
+            ("STRATA_STATE_ROOT", data.clone()),
+            ("STRATA_WORKSPACE", data.join("workspace")),
+            ("STRATA_EXPORT_DIR", data.join("exports")),
+            ("CUDA_CACHE_PATH", data.join("cuda-cache")),
+        ] {
+            if std::env::var_os(name).is_none() {
+                cmd.env(name, path);
+            }
+        }
+        // Temporary files (decoded pictures among them) too: emptied here, at each start, and never in the user's own temp folder.
+        let temp = data.join("temp");
+        let _ = std::fs::remove_dir_all(&temp);
+        if std::fs::create_dir_all(&temp).is_ok() {
+            cmd.env("TEMP", &temp).env("TMP", &temp);
+        }
+        cmd.env("STRATA_MODELS_DIR", root.join("models")).env("STRATA_MODELS_FIXED", "1");
+    }
     apply_runtime_policy(&mut cmd, res);
     hide_console(&mut cmd);
     if let Some(notice) = PORT_NOTICE.lock().unwrap().clone() {
@@ -1032,6 +1057,11 @@ fn open_window(app: &tauri::App, port: u16, shell_token: &str) -> Result<(), Box
     let builder = builder.disable_drag_drop_handler();
     #[cfg(windows)]
     let builder = builder.additional_browser_args(&webview_args());
+    #[cfg(windows)]
+    let builder = match desktoplog::install_root() {
+        Some(_) => builder.data_directory(desktoplog::data_dir().join("webview")),
+        None => builder,
+    };
     // WebKitGTK (2.50 to 2.52 at least) dereferences a null pointer in AcceleratedBackingStore::update in its UI process when a page calls
     // document.startViewTransition (the web process asks the UI process to enter accelerated compositing, and the backing store is not
     // there). The page itself does not call it on that engine (app/host/src/lib/router.ts), and this line keeps any other script from doing

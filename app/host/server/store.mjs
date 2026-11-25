@@ -59,6 +59,8 @@ function read() {
 
 let state = read();
 const DEFAULT_MODELS_DIRECTORY=defaultModelDirectory();
+/** The installed app: models are always in its own `models` folder (the shell sets this with STRATA_MODELS_DIR). */
+export const MODELS_FIXED = process.env.STRATA_MODELS_FIXED === '1' && !!process.env.STRATA_MODELS_DIR;
 /**
  * The model folder for a new install: the saved one, an existing library inside STRATA_HOME, else Documents/Strata/Models. A Documents folder
  * that cannot be made (Controlled folder access, a disconnected share, an offline OneDrive known folder) must not stop the host from starting:
@@ -80,7 +82,7 @@ export function pickModelsDirectory({ saved, home, preferred, fixedByEnv = false
   return { directory: legacy, notice: `Strata could not use ${preferred} for models (${error.code ?? error.message}), so models go to ${legacy}. You can pick another folder in Settings.` };
  }
 }
-const MODELS_PICK = pickModelsDirectory({ saved: state.modelsDir, home: HOME, preferred: DEFAULT_MODELS_DIRECTORY, fixedByEnv: !!process.env.STRATA_MODELS_DIR });
+const MODELS_PICK = pickModelsDirectory({ saved: MODELS_FIXED ? null : state.modelsDir, home: HOME, preferred: DEFAULT_MODELS_DIRECTORY, fixedByEnv: !!process.env.STRATA_MODELS_DIR });
 /** Plain words for the person when the usual model folder could not be used (empty otherwise). */
 export const MODELS_DIR_NOTICE = MODELS_PICK.notice;
 if (MODELS_DIR_NOTICE) console.warn(`[strata] ${MODELS_DIR_NOTICE}`);
@@ -90,6 +92,7 @@ export let MODELS_DIR = MODELS_PICK.directory;
 export function nativeDataDirectory(input) {
  if(!input||!existsSync(input))return input;
  if(MODELS_DIR_NOTICE)return input;
+ if(MODELS_FIXED&&realpathSync(input)===realpathSync(MODELS_DIR))return dirname(realpathSync(input));
  const root=realpathSync(input),legacy=realpathSync(join(HOME,'models'));
  // Retained legacy libraries are model folders too, not native data roots.
  // A named data root satisfies the installer's guard; its alias leaves weights in place.
@@ -129,6 +132,7 @@ export function validateModelsDirectory(input) {
 }
 
 export function changeModelsDirectory(directory) {
+  if (MODELS_FIXED) throw new Error('Models are kept in the models folder of the Strata installation.');
   const next = validateModelsDirectory(directory);
   if (next === MODELS_DIR) return false;
   const installedByDirectory = { ...state.installedByDirectory, [MODELS_DIR]: state.installed ?? {} };

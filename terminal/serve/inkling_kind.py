@@ -50,8 +50,32 @@ def wants_drafter(cfg: dict) -> bool:
     if choice == "auto":
         # measured at the first start of this placement (strata_control/inkling_probe.py); no valid probe yet = off, and needs_drafting_probe() says so
         from strata_control import inkling_probe
-        return inkling_probe.decision_of(cfg) == "on"
+        made = inkling_probe.decision_of(cfg)
+        return made == "on" if made else desktop_default(cfg)
     return choice not in ("off", "none", "false", "0")
+
+
+def desktop_default(cfg: dict) -> bool:
+    """The desktop app makes no launch probe, so "auto" had no decision there and DSpark was always off (an 8 GB card with SQ-10: 2 tok/s).
+    A native .strata build on NVIDIA carries its own drafter and starts with --draft-adapt (drafter_args), whose governor goes back to plain
+    decoding while drafting does not pay: on, for greedy requests only, as Qwen3.6's MTP (greedy_only_env). GGUF builds, other backends and the Terminal (which measures) keep the probe rule."""
+    import os
+    if not os.environ.get("STRATA_SETTINGS_FILE") or str(cfg.get("backend") or "cuda").lower() != "cuda":
+        return False
+    args = [str(a) for a in (cfg.get("args") or [])]
+    at = args.index("--native") + 1 if "--native" in args else len(args)
+    return at < len(args) and args[at].lower().endswith(".strata")
+
+
+def greedy_only_env(cfg: dict) -> dict:
+    """The engine setting that limits desktop_default's drafting to greedy requests; {} when the person chose drafting, or a probe did."""
+    from strata_control import inkling_family, inkling_probe
+    raw = cfg.get("drafting")
+    if raw is False or not is_inkling(cfg):
+        return {}
+    choice = str(raw if raw not in (None, "") else inkling_family.default_drafting(cfg.get("backend"))).strip().lower()
+    auto = choice == "auto" and not inkling_probe.decision_of(cfg)
+    return {"STRATA_INK_SPEC_GREEDY": "1"} if auto and desktop_default(cfg) else {}
 
 
 def needs_drafting_probe(cfg: dict) -> bool:

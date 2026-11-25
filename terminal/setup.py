@@ -9970,7 +9970,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     step(7, "writing the start script")
     args = ["--native", str(gguf), "--max-context", str(ctx), "--prefill", "auto", "--mtp", str(fam["mtp"])]
     if small:                                          # an agent's next turn resumes from a checkpoint instead of reading its whole prompt
-        args += ["--prompt-cache", "3"]
+        args += ["--prompt-cache", "6"]
     if kv:
         args += ["--kv", "q8" if kv == "fp8" else kv]          # q8: the word the fork's 1.0.x engines know the 8-bit cache by, too
         ok(f"KV cache: --kv {kv}")
@@ -9993,7 +9993,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         cfg["backend"] = "hip"
     if small:                                          # the model file's pages read while loading leave the engine's working set
         cfg["env"] = {**(cfg.get("env") or {}), "STRATA_Q36_RELEASE_FILE_PAGES": "1"}
-        ok("8 GB card: conversation checkpoints on (--prompt-cache 3), the model file's loaded pages given back to Windows")
+        ok("8 GB card: conversation checkpoints on (--prompt-cache 6), the model file's loaded pages given back to Windows")
     if peer_gpu is not None:
         cfg["gpu"] = [gpu.get("index", 0), peer_gpu]    # both cards visible (CUDA_VISIBLE_DEVICES), the main card first: --peer-device 1 is the second
         cfg["gpus_asked"] = True

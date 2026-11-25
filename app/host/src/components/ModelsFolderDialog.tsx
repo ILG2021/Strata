@@ -152,9 +152,9 @@ export function ModelsFolderCard({ blocked }: { blocked: boolean }) {
 
     return <>
     <section className="storage-directory" aria-labelledby="models-folder-title">
-      <div className="storage-directory__heading"><span><Icon name="folder" size={18}/><strong id="models-folder-title">{tr('Models folder')}</strong></span><Btn size="sm" disabled={!folder || blocked || pending || !!moving} onClick={() => void pick()}>{tr(pending && !plan ? 'Waiting for the folder…' : 'Change folder')}</Btn></div>
+      <div className="storage-directory__heading"><span><Icon name="folder" size={18}/><strong id="models-folder-title">{tr('Models folder')}</strong></span>{native?.modelsFixed ? null : <Btn size="sm" disabled={!folder || blocked || pending || !!moving} onClick={() => void pick()}>{tr(pending && !plan ? 'Waiting for the folder…' : 'Change folder')}</Btn>}</div>
       <p className="small muted">{tr('Strata saves the big model files here.')}</p>
-      <code className="storage-directory__path">{folder || tr('Reading model directory…')}</code>
+      <code className="storage-directory__path">{folder ? (native?.modelsFixed ? folder + '\\models' : folder) : tr('Reading model directory…')}</code>
       {free !== null ? <div className="models-free"><Bar value={used} label={tr('Disk use')}/><div className="models-free__row small"><span><strong>{tr('{0} free', [gb(free)])}</strong> {tr('on this drive')}</span><span className="muted">{tr('Your models use {0}', [gb(usage)])}</span></div></div> : null}
       {blocked && !moving ? <p className="small muted">{tr('Finish or stop the download to change the folder.')}</p> : null}
       {typing ? <form className="storage-directory__edit" onSubmit={e => { e.preventDefault(); if (typed.trim()) void pick(typed.trim()); }}>

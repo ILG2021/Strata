@@ -4892,10 +4892,20 @@ struct Serve {
     void add_check(int64_t L, const std::vector<int32_t>& ids, bool root) {
         for (Ckpt& c : checks)
             if ((int64_t) c.ids.size() == L) { c.made = ++ckpt_clock; return; }
-        while ((int) checks.size() >= ckpt_max) {   // room first (RAM is what limits this): the oldest that is not the root
+        while ((int) checks.size() >= ckpt_max) {   // room first (RAM is what limits this)
+            // The ones kept thin out going back through the conversation: the one whose loss leaves the smallest gap for its
+            // distance from the end goes.  Dropping the oldest kept only the last two turns of a long tool loop, so a new
+            // question (the template then rewrites that loop's turns) was read again from the system prompt.
+            std::sort(checks.begin(), checks.end(), [](const Ckpt& a, const Ckpt& b) { return a.ids.size() < b.ids.size(); });
             int v = -1;
-            for (int i = 0; i < (int) checks.size(); ++i)
-                if (!checks[(size_t) i].root && (v < 0 || checks[(size_t) i].made < checks[(size_t) v].made)) v = i;
+            double least = 0.0;
+            for (int i = 0; i < (int) checks.size(); ++i) {
+                if (checks[(size_t) i].root) continue;
+                const double lo = i > 0 ? (double) checks[(size_t) i - 1].ids.size() : 0.0;
+                const double hi = i + 1 < (int) checks.size() ? (double) checks[(size_t) i + 1].ids.size() : (double) L;
+                const double gap = (hi - lo) / std::max(1.0, (double) L - lo);
+                if (v < 0 || gap < least) { v = i; least = gap; }
+            }
             checks.erase(checks.begin() + (v < 0 ? 0 : v));
         }
         const size_t n = E.state_floats();
@@ -4951,6 +4961,21 @@ struct Serve {
         }
         if (best) {
             const size_t L = best->ids.size();
+            size_t top = 0;
+            for (const Ckpt& c : checks) top = std::max(top, c.ids.size());
+            if (best->root && top >= L + (size_t) kCkptMinTokens && (held.empty() || (int64_t) top >= held_top)) {
+                // another conversation of the same client (a sub-agent, a new session): only the system prompt is shared.
+                // The longer one is kept aside, as for a prompt that shares nothing; it used to be dropped here, and its
+                // next turn was read again from the system prompt.
+                drop_held(nullptr);
+                Ckpt base = *best;
+                held = std::move(checks);
+                held_top = (int64_t) top;
+                held_host = 0;
+                checks.clear();
+                checks.push_back(std::move(base));
+                best = &checks.front();
+            }
             E.state_in(best->state.data(), (int64_t) L, best->rdelta);
             ss.live.assign(best->ids.begin(), best->ids.end());
             ss.imgs.clear();

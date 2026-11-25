@@ -433,7 +433,7 @@ FunctionEnd
 !endif
 !define MUI_PAGE_HEADER_TEXT "Choose where to install Strata"
 !define MUI_PAGE_HEADER_SUBTEXT "Pick another drive if C: is short on space."
-!define MUI_DIRECTORYPAGE_TEXT_TOP "Strata is installed into this folder, for your user only (no administrator needed). Models and chats are stored separately, in the data folder you choose inside Strata."
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Strata is installed into this folder (no administrator needed). Everything it makes stays inside it: models in the models folder, chats, settings and the engine in the data folder. Pick a drive with enough space for models."
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_DIRECTORY
 
@@ -498,7 +498,7 @@ Function un.DataPage
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
   ${NSD_CreateCheckBox} 0 0 100% 12u "Also remove my Strata data (models, chats, settings)"
   Pop $DeleteAppDataCheckbox
-  ${NSD_CreateLabel} 12u 18u -12u 96u "If you tick it, these folders are deleted, and nothing else:$\r$\n$\r$\n$LOCALAPPDATA\Strata   (engine, installed copy, tunings)$\r$\n$APPDATA\Strata   (settings)$\r$\n$PROFILE\.strata   (your chats, app settings)$\r$\n$DOCUMENTS\Strata\Models   (models Strata downloaded into its own folder)$\r$\n$\r$\nA model folder you chose yourself is never deleted."
+  ${NSD_CreateLabel} 12u 18u -12u 96u "If you tick it, these folders are deleted, and nothing else:$\r$\n$\r$\n$INSTDIR\data   (chats, settings, engine, logs)$\r$\n$INSTDIR\models, packs, mtp   (downloaded models)$\r$\n$\r$\nA folder Strata did not make is never deleted."
   Pop $0
   ${NSD_SetFocus} $DeleteAppDataCheckbox
   nsDialogs::Show
@@ -556,7 +556,9 @@ Function .onInit
         StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
       ${EndIf}
     !else if "${INSTALLMODE}" == "currentUser"
-      StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}"
+      ; Everything Strata makes (data, models) lives inside this folder, so it is not a hidden per-user one: <system drive>\<name>.
+      ReadEnvStr $INSTDIR SystemDrive
+      StrCpy $INSTDIR "$INSTDIR\${PRODUCTNAME}"
     !endif
 
     Call RestorePreviousInstallLocation
@@ -702,19 +704,11 @@ SectionEnd
 ; STRATA-MIGRATE-END
 
 ; STRATA-STOP-BEGIN
-; Stop what Strata itself started from the install folder (the app, its host, the node runtime, the engine) before files are removed:
-; a running copy keeps its files open, so the folder stayed behind after use. Only processes whose image path is inside INSTDIR are
-; stopped; this uninstaller's own process and any program elsewhere are left alone.
+; The shell (closed by CheckIfAppIsRunning just before) owns a kill-on-close job object with the host, the node runtime, the server and the
+; engine in it, so they end with it. Only the wait for their files is left here. This used to run a hidden script that ended processes; an
+; unsigned uninstaller doing that is what antivirus heuristics look for (Bitdefender reported uninstall.exe).
 !macro StrataStopOwnProcesses INSTALLDIR
-  System::Call 'kernel32::SetEnvironmentVariableW(w "STRATA_INSTDIR", w "${INSTALLDIR}")'
-  System::Call 'kernel32::GetCurrentProcessId()i.r9'
-  System::Call 'kernel32::SetEnvironmentVariableW(w "STRATA_SELFPID", w "$9")'
-  ; the installer is a 32-bit program, so plain powershell.exe is the 32-bit one, which cannot read the image path of a 64-bit process: use the 64-bit one
-  StrCpy $8 "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
-  IfFileExists $8 +2 0
-    StrCpy $8 "powershell.exe"
-  nsExec::Exec '"$8" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$d = [IO.Path]::GetFullPath($$env:STRATA_INSTDIR).TrimEnd([char]92) + [char]92; $$ids = @(); $$ids += Get-Process -ErrorAction SilentlyContinue | Where-Object { $$_.Path -and [IO.Path]::GetFullPath($$_.Path).StartsWith($$d, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { $$_.Id }; try { $$ids += Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $$_.ExecutablePath -and [IO.Path]::GetFullPath($$_.ExecutablePath).StartsWith($$d, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { $$_.ProcessId } } catch {}; $$ids | Sort-Object -Unique | Where-Object { $$_ -ne [int]$$env:STRATA_SELFPID } | ForEach-Object { Stop-Process -Id $$_ -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 1500"'
-  Pop $9
+  Sleep 2000
 !macroend
 ; STRATA-STOP-END
 
@@ -876,8 +870,8 @@ Section Uninstall
     !insertmacro NSIS_HOOK_PREUNINSTALL
   !endif
 
-  !insertmacro StrataStopOwnProcesses "$INSTDIR"
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro StrataStopOwnProcesses "$INSTDIR"
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
@@ -982,20 +976,16 @@ Section Uninstall
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
 
-    ; Strata's own data, for a fresh start: the folders listed on the page, nothing else. Each path is checked first.
-    ${If} "$LOCALAPPDATA" != ""
-      RmDir /r "$LOCALAPPDATA\Strata"
+    ; Strata's own folders, as the page lists them. A folder without the file the app put there when it made it is somebody else's.
+    ${If} ${FileExists} "$INSTDIR\data\.strata-folder"
+      RMDir /r "$INSTDIR\data"
     ${EndIf}
-    ${If} "$APPDATA" != ""
-      RmDir /r "$APPDATA\Strata"
+    ${If} ${FileExists} "$INSTDIR\models\.strata-folder"
+      RMDir /r "$INSTDIR\models"
+      RMDir /r "$INSTDIR\packs"
+      RMDir /r "$INSTDIR\mtp"
     ${EndIf}
-    ${If} "$PROFILE" != ""
-      RmDir /r "$PROFILE\.strata"
-    ${EndIf}
-    ${If} "$DOCUMENTS" != ""
-      RmDir /r "$DOCUMENTS\Strata\Models"
-      RmDir "$DOCUMENTS\Strata"          ; only if it is empty now
-    ${EndIf}
+    RMDir "$INSTDIR"
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
@@ -1042,6 +1032,16 @@ Function RestorePreviousInstallLocation
   StrCmp $4 "" restore_done 0
   ; %LOCALAPPDATA%\Strata holds the user's engines, model configs and tuning: never an app folder
   StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0
+  ; Versions up to 1.0.3 were installed under %LOCALAPPDATA%. An update stays where it is; an installer the person opens offers the new place.
+  StrCmp $UpdateMode 1 restore_place 0
+  StrCmp $PassiveMode 1 restore_place 0
+  IfSilent restore_place 0
+  Push $4
+  Push "$LOCALAPPDATA"
+  Call StrIsUnder
+  Pop $5
+  StrCmp $5 1 restore_done 0
+  restore_place:
   Push $4
   Push "$LOCALAPPDATA\Temp"
   Call StrIsUnder

@@ -33,7 +33,7 @@ and lists it first. Setup then writes these settings without being asked:
 | Size | UD-IQ3_S (converted once after the download) | The only size whose experts fit 32 GB of RAM beside Windows |
 | Context | 128K | As every Qwen3.6 size |
 | Conversation memory | 8-bit (`--kv int8`, the engine's `--kv q8`) | 128K in fp32 does not fit 8 GB |
-| Conversation checkpoints | `--prompt-cache 3` | An agent's next turn is not read from the start |
+| Conversation checkpoints | `--prompt-cache 6` | An agent's next turn is not read from the start |
 | Model file pages | `STRATA_Q36_RELEASE_FILE_PAGES=1` | About 8.8 GB of RAM goes back to Windows after loading |
 
 On a Windows PC with such a card, the whole path is:
@@ -117,9 +117,10 @@ the size from the same table; its install was not run.
 | Decode without drafts | 33 to 35 tokens/s |
 | Prompt of 2,828 tokens | 348 tokens/s |
 
-The drafts run only for a fully greedy request. Send `temperature: 0`, `top_p: 1`, `top_k: 0` and
-`presence_penalty: 0`. With `temperature: 0` alone the server keeps its default sampling settings, and the engine
-decodes one token at a time.
+The drafts run only for a greedy request without penalties. `temperature: 0` is enough: the server then leaves out the
+model card's `presence_penalty`, and `top_p` / `top_k` do not matter. A presence, frequency or repetition penalty that the
+request, the run config's `sampling` block or the shared Chat settings name themselves still turns the drafts off. The
+engine's log says how many drafts a request got (`drafts accepted X of Y`).
 
 ## 128K on an 8 GB card: the 8-bit cache (the default on 8 GB cards, opt-in elsewhere)
 

@@ -419,7 +419,7 @@ def user_roots() -> list[Path]:
     """The folders that are the user's own per-user data: a file inside one may be repaired by that user."""
     roots: list[Path] = []
     for key in ("APPDATA", "LOCALAPPDATA", "STRATA_HOME", "STRATA_PROFILE_DIR", "STRATA_INSTALL_DIR", "STRATA_RUNTIME_DIR",
-                "STRATA_STATE_DIR"):
+                "STRATA_STATE_DIR", "STRATA_STATE_ROOT"):
         value = os.environ.get(key)
         if value:
             roots.append(Path(value))

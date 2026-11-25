@@ -33,7 +33,39 @@ pub fn data_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("STRATA_DESKTOP_DATA_DIR") {
         return PathBuf::from(dir);
     }
-    platform_data_dir()
+    install_root().map(|root| root.join("data")).unwrap_or_else(platform_data_dir)
+}
+
+/// The folder the installed Windows app lives in. Everything Strata makes is kept inside it: `data` (chats, settings, engine, logs) and
+/// `models`. None in a development run, and where the user cannot write there (Program Files): then the per-user folders are used.
+#[cfg(windows)]
+pub fn install_root() -> Option<PathBuf> {
+    static ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        let exe = std::env::current_exe().ok()?;
+        let root = exe.parent()?.to_path_buf();
+        if !root.join("host").join("server").join("index.mjs").is_file() {
+            return None;
+        }
+        // The uninstaller deletes a folder only when this file says Strata made it.
+        for name in ["data", "models"] {
+            let dir = root.join(name);
+            if !dir.is_dir() {
+                std::fs::create_dir(&dir).ok()?;
+                std::fs::write(dir.join(".strata-folder"), b"made by Strata").ok()?;
+            }
+        }
+        let probe = root.join("data").join(format!(".write-{}", std::process::id()));
+        std::fs::write(&probe, b"").ok()?;
+        let _ = std::fs::remove_file(&probe);
+        Some(root)
+    })
+    .clone()
+}
+
+#[cfg(not(windows))]
+pub fn install_root() -> Option<PathBuf> {
+    None
 }
 
 /// Windows: `%LOCALAPPDATA%\Strata`, the folder the host and Control already use for the components and the install.
@@ -514,6 +546,11 @@ fn install_panic_hook() {
 }
 
 pub fn downloads_dir() -> PathBuf {
+    if let Some(root) = install_root() {
+        let dir = root.join("data").join("exports");
+        let _ = std::fs::create_dir_all(&dir);
+        return dir;
+    }
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|h| PathBuf::from(h).join("Downloads")).unwrap_or_else(std::env::temp_dir)
 }
 

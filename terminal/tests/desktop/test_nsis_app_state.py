@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT.parent / "app" / "desktop" / "src-tauri" / "nsis" / "installer.nsi"
 TEXT = TEMPLATE.read_text(encoding="utf-8")
-DATA_RM = r'RmDir /r "$LOCALAPPDATA\Strata"'
+DATA_RM = r'RMDir /r "$INSTDIR\data"'
 
 
 class AppStateStays(unittest.TestCase):
@@ -33,7 +33,7 @@ class AppStateStays(unittest.TestCase):
             self.assertNotRegex(outside, re.escape(name) if name.startswith("\\") else rf"Delete\s+\"[^\"]*{re.escape(name)}", name)
 
     def test_the_page_says_the_folder_holds_engine_and_tunings_and_that_unticked_nothing_is_deleted(self):
-        self.assertIn(r"$LOCALAPPDATA\Strata   (engine, installed copy, tunings)", TEXT)
+        self.assertIn(r"$INSTDIR\data   (chats, settings, engine, logs)", TEXT)
         self.assertIn("Your models, chats and settings stay on this PC unless you tick the box.", TEXT)
         self.assertIn("Also remove my Strata data (models, chats, settings)", TEXT)
 

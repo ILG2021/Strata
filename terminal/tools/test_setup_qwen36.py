@@ -303,7 +303,7 @@ class InstallOwnPath(unittest.TestCase):
         self.assertIn("Recommended for this 8 GB card: UD-IQ3_S", out)
         self.assertEqual(a[a.index("--kv") + 1], "q8")
         self.assertEqual(a[a.index("--max-context") + 1], "131072")
-        self.assertEqual(a[a.index("--prompt-cache") + 1], "3")
+        self.assertEqual(a[a.index("--prompt-cache") + 1], "6")
         self.assertEqual(self.cfg["env"]["STRATA_Q36_RELEASE_FILE_PAGES"], "1")
         self.assertIn("the default on an 8 GB card", out)
 

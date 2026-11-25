@@ -15,6 +15,7 @@ const winPath = (...parts) => parts.join('\\');
 
 /** The folder under which Strata keeps per-user state (tuning jobs, Time-skip runs). */
 export function stateRoot(env = process.env, platform = process.platform, home = homedir()) {
+  if (env.STRATA_STATE_ROOT) return env.STRATA_STATE_ROOT;   // the installed app: its own folder
   if (platform === 'win32') {
     const local = env.LOCALAPPDATA || winPath(env.USERPROFILE || home, 'AppData', 'Local');
     return winPath(local, 'Strata');

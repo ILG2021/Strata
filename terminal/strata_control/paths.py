@@ -15,6 +15,8 @@ def state_base(environ=None, *, windows: bool | None = None, home: Path | None =
     environ = os.environ if environ is None else environ
     windows = os.name == "nt" if windows is None else windows
     home = Path.home() if home is None else home
+    if environ.get("STRATA_STATE_ROOT"):                   # the installed desktop app: its own folder
+        return Path(environ["STRATA_STATE_ROOT"])
     if windows:
         local = environ.get("LOCALAPPDATA") or str(home / "AppData" / "Local")
         return Path(local) / "Strata"
