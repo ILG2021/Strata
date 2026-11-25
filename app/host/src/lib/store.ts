@@ -103,7 +103,7 @@ export interface AppState {
   shareTelemetry: boolean;
   paletteOpen: boolean;
   shortcutsOpen: boolean;
-  settingsSection: 'Appearance' | 'Models' | 'Storage' | 'Engine' | 'About';
+  settingsSection: 'Appearance' | 'Models' | 'Context and memory' | 'Storage' | 'Engine' | 'About';
   hardware: Hardware | null;
   library: ModelLibrary | null;
   imageModels: ImageModelLibrary | null;
@@ -678,7 +678,7 @@ export function setWhileBusy(whileBusy: WhileBusy) {
   savePrefs();
 }
 
-/** A message sent while an answer is being written waits here; the chat sends it when the answer is done (it is also where Interrupt leaves it). */
+/** A message sent while an answer is being written waits here until the answer is done. */
 export function parkMessage(sessionId: string, text: string) {
   const clean = text.trim();
   if (!clean) return;
@@ -1764,7 +1764,7 @@ export async function sendMessage(text: string, options: { fromLoop?: boolean; s
         model: state.library?.loaded ?? state.library?.current ?? null,
         nativeModelId:nativeState()?.instances.length?nativeState()?.defaultId:undefined,
         ...(pictures.length ? { imageIds: await uploadChatPhotos(pictures, sessionId) } : {}),
-        thinking:state.sessions.find(s=>s.id===sessionId)?.preferences?.thinking??'Medium',
+        thinking:state.sessions.find(s=>s.id===sessionId)?.preferences?.thinking??((()=>{/* Inkling-2-Mini's default level is Low (0.2.21), the menu shows the same */const n=nativeState();const i:any=n?.instances.find((x:any)=>x.id===n.defaultId)??n?.instances[0];return !!i&&(i.arch==='inkling2_loop'||/^inkling-2-mini/i.test(String(i.model??i.apiModelId??'')));})()?'Low':'Medium'),
         thinkingBudget:state.sessions.find(s=>s.id===sessionId)?.preferences?.thinkingBudget??0,
         workspaceId: workspaceIdForSession(state.workspaces, state.sessions.find(s => s.id === sessionId)) ?? state.activeWorkspace,
       },

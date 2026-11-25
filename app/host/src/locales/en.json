@@ -3573,5 +3573,19 @@
   "s9138": "8K",
   "s9139": "32K",
   "s9140": "Both cards are {0}, so they are alike: one is Main and the other helps.",
-  "s9141": "All {0} cards are {1}, so they are alike: one is Main and the others help."
+  "s9141": "All {0} cards are {1}, so they are alike: one is Main and the others help.",
+  "ramReserveSection": "Context and memory",
+  "ramReserveChatContext": "Chat context",
+  "ramReserveSystemRam": "System RAM",
+  "ramReserveLabel": "RAM to keep free (GiB) (experimental)",
+  "ramReserveHint": "Keep system RAM available when loading local models. Applies to all profiles the next time they load.",
+  "ramReserveCustom": "Custom RAM reserve (GiB)",
+  "ramReserveInvalid": "Enter a whole number of GiB above zero, or choose Automatic.",
+  "ramReserveSaved": "Saved",
+  "modelPortLabel": "Model server port",
+  "modelPortAria": "Model server port (empty = automatic)",
+  "modelPortActive": "Active model port: {0}.",
+  "modelPortHint": "The starting port local model servers use (default 18500). Leave empty for automatic; Strata avoids probing port 8080 so it does not conflict with other local apps such as Spring Boot. Applies the next time a model loads.",
+  "promptCacheSpreadLabel": "Spread prompt cache checkpoints",
+  "promptCacheSpreadHint": "Passes --prompt-cache-spread to local models so saved checkpoints thin out back through long conversations instead of clustering at the end. Uses the same RAM and cuts compaction re-read time on hybrid models. Applies the next time a model loads."
 }

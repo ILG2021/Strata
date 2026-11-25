@@ -3573,5 +3573,19 @@
   "s9138": "8K",
   "s9139": "32K",
   "s9140": "Las dos tarjetas son {0}, así que son iguales: una es la principal y la otra ayuda.",
-  "s9141": "Las {0} tarjetas son {1}, así que son iguales: una es la principal y las demás ayudan."
+  "s9141": "Las {0} tarjetas son {1}, así que son iguales: una es la principal y las demás ayudan.",
+  "ramReserveSection": "Contexto y memoria",
+  "ramReserveChatContext": "Contexto del chat",
+  "ramReserveSystemRam": "RAM del sistema",
+  "ramReserveLabel": "RAM que mantener libre (GiB) (experimental)",
+  "ramReserveHint": "Mantiene memoria RAM del sistema disponible al cargar modelos locales. Se aplica a todos los perfiles la próxima vez que se carguen.",
+  "ramReserveCustom": "Reserva de RAM personalizada (GiB)",
+  "ramReserveInvalid": "Introduce un número entero de GiB mayor que cero o elige Automático.",
+  "ramReserveSaved": "Guardado",
+  "modelPortLabel": "Puerto del servidor de modelos",
+  "modelPortAria": "Puerto del servidor de modelos (vacío = automático)",
+  "modelPortActive": "Puerto de modelo activo: {0}.",
+  "modelPortHint": "El puerto inicial que usan los servidores de modelos locales (18500 por defecto). Déjalo vacío para automático; Strata evita sondear el puerto 8080 para no entrar en conflicto con otras aplicaciones locales como Spring Boot. Se aplica la próxima vez que se cargue un modelo.",
+  "promptCacheSpreadLabel": "Distribuir los puntos de control de caché de prompt",
+  "promptCacheSpreadHint": "Pasa --prompt-cache-spread a los modelos locales para que los puntos de control se distribuyan a lo largo de conversaciones largas en lugar de agruparse al final. Usa la misma RAM y reduce el tiempo de relectura al compactar en modelos híbridos. Se aplica la próxima vez que se cargue un modelo."
 }

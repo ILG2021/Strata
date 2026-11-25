@@ -149,8 +149,28 @@ test('run-config-check allows parallel 64 for Inkling-2-Mini', async () => {
   const checkedBadEffort = checkRunConfig(JSON.stringify({
     exe: 'component:strata-inkling',
     arch: 'inkling2_loop',
-    reasoning_effort: 'high',
+    reasoning_effort: 'xhigh',
     args: ['--native', 'Inkling-2-Mini-SQ-20.strata'],
   }));
-  assert.equal(checkedBadEffort.ok, false, 'Inkling-2-Mini must reject non-off reasoning_effort');
+  assert.equal(checkedBadEffort.ok, false, 'an unknown reasoning_effort is still rejected');
+  assert.equal(checkRunConfig(JSON.stringify({ exe: 'component:strata-inkling', arch: 'inkling2_loop', reasoning_effort: 'high', args: ['--native', 'Inkling-2-Mini-SQ-20.strata'] })).ok, true, 'Inkling-2-Mini takes the thinking levels');
+});
+
+test('multi-GPU config keys and NativeModels UI omit layer_split for expert-parallel native families', async () => {
+  const { readFileSync } = await import('node:fs');
+  const models = readFileSync(new URL('../src/components/NativeModels.tsx', import.meta.url), 'utf8');
+  const nc = readFileSync(new URL('../server/native-control.mjs', import.meta.url), 'utf8');
+  assert.match(models, /cardsGpus\.length > 1 && !isHy4Selected/);
+  assert.match(models, /!isHy4Selected \? \{ layerSplit:/);
+  assert.match(nc, /isHy4\(cfg\)\|\|isInkling\(cfg\)/);
+  const checked = checkRunConfig(JSON.stringify({
+    exe: 'component:strata-inkling',
+    arch: 'inkling2_loop',
+    gpu: [1, 0],
+    gpu_roles: { '0': 'main', '1': 'helper' },
+    gpu_cards: { '0': 'AMD Radeon RX 9070 XT', '1': 'AMD Radeon RX 9070 XT' },
+    gpu_none: false,
+    args: ['--native', 'Inkling-2-Mini-SQ-20.strata', '--gpus', '2'],
+  }));
+  assert.equal(checked.ok, true, JSON.stringify(checked.issues));
 });

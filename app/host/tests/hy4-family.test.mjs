@@ -127,7 +127,7 @@ test('Hy4-Flash on-demand Vision fetch, Step 4 tune() vision preservation, and U
   assert.match(nc, /vision:\(isHy4\(current\.config\)\|\|isInkling\(current\.config\)\|\|current\.config\.vision\)\?args\.vision:'no'/);
   assert.match(nc, /withoutHy4Vision/);
   assert.match(composer, /hy4Efforts = \['Off', 'High', 'Max'\]/);
-  assert.match(composer, /isHy4Active[\s\S]*'High' : 'Medium'/);
+  assert.match(composer, /isHy4Active[\s\S]*'High' : isInklingActive \? 'Low' : 'Medium'/);
   assert.match(models, /isHy4Selected = selectedFamily\?\.family === HY4_FAMILY/);
   assert.match(models, /!isHy4Selected \? <NativeTuneBadge/);
   assert.match(models, /!isHy4Selected \? <Btn icon="gauge"/);
@@ -190,7 +190,7 @@ test('behavioral: native-control tune() and load on-demand Vision fetch keep Hy4
         const msg = JSON.parse(line); if (!msg.id) return;
         let result = {};
         if (msg.params?.name === 'strata_models') result = { structuredContent: catalog };
-        else if (msg.params?.name === 'strata_status') result = { structuredContent: { hardware: { ram_gb: 128, cpu: { cores: 16 }, gpus: [] }, summary: 'ok' } };
+        else if (msg.params?.name === 'strata_status') result = { structuredContent: { hardware: { ram_gb: 128, cpu: { cores: 16 }, gpus: [{ index: 0, name: 'AMD Radeon RX 9070 XT', vram_gb: 16, usable: true, vendor: 'amd' }, { index: 1, name: 'AMD Radeon RX 9070 XT', vram_gb: 16, usable: true, vendor: 'amd' }] }, summary: 'ok' } };
         queueMicrotask(() => child.stdout.emit('data', Buffer.from(JSON.stringify({ id: msg.id, ...(result.isError ? { error: { message: result.structuredContent.error } } : { result: result.structuredContent }) }) + '\n')));
       },
     };
@@ -229,6 +229,22 @@ test('behavioral: native-control tune() and load on-demand Vision fetch keep Hy4
     assert.equal(j2.state, 'done', j2.error);
     assert.equal(hy4VisionShard(savedConfigs.at(-1)), visionFile);
     assert.equal(native.state().instances[0].vision, true);
+    // 3. Multi-GPU load with gpuRoles persists gpu/gpu_roles and never writes layer_split for Hy4-Flash
+    const roles = { '0': 'main', '1': 'helper' };
+    const j3 = await finish(native.operation('load', { model: 'hy4-flash-sq-64', vision: 'yes', gpuRoles: roles, layerSplit: 'auto' }).id);
+    assert.equal(j3.state, 'done', j3.error);
+    const savedMulti = savedConfigs.at(-1);
+    assert.equal(savedMulti.layer_split, undefined, 'Hy4-Flash must never receive layer_split');
+    assert.deepEqual(savedMulti.gpu_roles, roles);
+    assert.deepEqual(savedMulti.gpu, [1, 0]);
+    const persistedMulti = JSON.parse(readFileSync(configPath, 'utf8'));
+    assert.deepEqual(persistedMulti.gpu_roles, roles);
+    assert.deepEqual(persistedMulti.gpu, [1, 0]);
+    assert.equal(persistedMulti.gpu_order, 'as_given');
+    assert.equal(persistedMulti.gpus_asked, true);
+    assert.equal(persistedMulti.layer_split, undefined);
+    const checkedMulti = checkRunConfig(JSON.stringify(persistedMulti, null, 2));
+    assert.equal(checkedMulti.ok, true, JSON.stringify(checkedMulti.issues));
   } finally {
     await native.close();
     if (prevInstall === undefined) delete process.env.STRATA_INSTALL_DIR; else process.env.STRATA_INSTALL_DIR = prevInstall;

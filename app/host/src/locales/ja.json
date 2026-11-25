@@ -3573,5 +3573,19 @@
   "s9138": "8K",
   "s9139": "32K",
   "s9140": "2 枚とも {0} なので同じです。1 枚がメインで、もう 1 枚がサポートします。",
-  "s9141": "{0} 枚とも {1} なので同じです。1 枚がメインで、残りがサポートします。"
+  "s9141": "{0} 枚とも {1} なので同じです。1 枚がメインで、残りがサポートします。",
+  "ramReserveSection": "コンテキストとメモリ",
+  "ramReserveChatContext": "チャットコンテキスト",
+  "ramReserveSystemRam": "システム RAM",
+  "ramReserveLabel": "空きを維持する RAM（GiB）（実験的）",
+  "ramReserveHint": "ローカルモデルの読み込み時にシステム RAM の空きを確保します。次回すべてのプロファイルを読み込むときに適用されます。",
+  "ramReserveCustom": "カスタム RAM 予約（GiB）",
+  "ramReserveInvalid": "0 より大きい整数の GiB を入力するか、「自動」を選んでください。",
+  "ramReserveSaved": "保存しました",
+  "modelPortLabel": "モデルサーバーポート",
+  "modelPortAria": "モデルサーバーポート（空欄＝自動）",
+  "modelPortActive": "使用中のモデルポート：{0}。",
+  "modelPortHint": "ローカルモデルサーバーが使用する開始ポート（既定は 18500）。空欄で自動設定になります。Strata は Spring Boot などのローカルアプリと競合しないようポート 8080 へのプローブを避けます。次回モデル読み込み時に適用されます。",
+  "promptCacheSpreadLabel": "プロンプトキャッシュのチェックポイントを分散する",
+  "promptCacheSpreadHint": "ローカルモデルに --prompt-cache-spread を渡し、長い会話でチェックポイントが末尾に集中せず後方へ分散して残るようにします。同じ RAM 使用量でハイブリッドモデルの圧縮時の再読み込み時間を短縮します。次回モデル読み込み時に適用されます。"
 }

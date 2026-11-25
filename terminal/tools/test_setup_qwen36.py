@@ -150,10 +150,32 @@ class InstallOwnPath(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def install(self, ram=64.0, vram=16.0, hip=False, **kw):
-        gpu = {"index": 0, "count": 1, "vram_gb": vram, "name": "Test GPU"}
+    def install(self, ram=64.0, vram=16.0, hip=False, multi=None, main=0, **kw):
+        gpu = {"index": main, "count": 1, "vram_gb": vram, "name": "Test GPU"}
         return run(setup.install_own_path, args(models_dir=str(self.root / "models"), **kw), "qwen36", gpu, hip, [],
-                   13, [], 8080, ram, None)
+                   13, multi or [], 8080, ram, None)
+
+    def test_two_cards_get_the_second_card_expert_tier_and_the_main_card_first_6839(self):
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", multi=[0, 1], kv="fp16", peer_reserve_mib=900)
+        self.assertEqual(rc, 0, out)
+        a = self.cfg["args"]
+        self.assertEqual(a[a.index("--peer-device") + 1], "1")
+        self.assertEqual(a[a.index("--peer-reserve-mib") + 1], "900")
+        self.assertEqual(a[a.index("--kv") + 1], "fp16")
+        self.assertEqual(self.cfg["gpu"], [0, 1])
+        self.assertNotIn("--layer-split", a)
+        # the card chosen as main last (the roles screen): the config still lists the main card first, and --peer-device names the second slot
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", multi=[0, 1], main=1)
+        self.assertEqual(self.cfg["gpu"], [1, 0])
+        a = self.cfg["args"]
+        self.assertEqual(a[a.index("--peer-device") + 1], "1")
+        # one card, or a Flash-Next --kv: neither is written
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", kv="q4_0")
+        self.assertNotIn("--peer-device", self.cfg["args"])
+        self.assertNotIn("--kv", self.cfg["args"])
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", multi=[0, 1, 2])   # three cards: one card, said
+        self.assertNotIn("--peer-device", self.cfg["args"])
+        self.assertIn("runs on one GPU", out)
 
     def test_installs_the_pinned_file_and_writes_the_config(self):
         rc, out = self.install(model="UD-Q4_K_XL", vision="no")
@@ -271,7 +293,7 @@ class InstallOwnPath(unittest.TestCase):
         rc, out = self.install(model="UD-Q4_K_XL", vision="no", kv="q4_0")   # not this path's: said, not passed on
         self.assertEqual(rc, 0, out)
         self.assertNotIn("--kv", self.cfg["args"])
-        self.assertIn("its memory takes --kv int8", out)
+        self.assertIn("takes int8, fp16 or fp8", out)
 
     def test_an_8gb_card_gets_the_8gb_settings_by_default(self):
         rc, out = self.install(ram=32.0, vram=8.0, vision="no")
@@ -285,10 +307,11 @@ class InstallOwnPath(unittest.TestCase):
         self.assertEqual(self.cfg["env"]["STRATA_Q36_RELEASE_FILE_PAGES"], "1")
         self.assertIn("the default on an 8 GB card", out)
 
-    def test_an_8gb_card_keeps_fp32_when_another_memory_is_asked_for(self):
+    def test_an_8gb_card_keeps_the_memory_format_that_is_asked_for(self):
         rc, out = self.install(ram=32.0, vram=8.0, vision="no", kv="fp16")
         self.assertEqual(rc, 0, out)
-        self.assertNotIn("--kv", self.cfg["args"])
+        a = self.cfg["args"]
+        self.assertEqual(a[a.index("--kv") + 1], "fp16")
         self.assertIn("--prompt-cache", self.cfg["args"])          # the rest of the 8 GB settings stay
 
     def test_a_12gb_card_is_unchanged(self):

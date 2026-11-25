@@ -40,7 +40,7 @@ import * as engine from './engine.mjs';
 import * as monitor from './monitor.mjs';
 import * as serving from './serving.mjs';
 import * as store from './store.mjs';
-import { createChatStore, storeFailure } from './chat-store.mjs';
+import { createChatStore, drainChatStore, storeFailure, validChatId } from './chat-store.mjs';
 import { makePrivateDir } from './private-file.mjs';
 import * as supervisor from './supervisor.mjs';
 import { detectBackend, currentBackend, streamChat, inferenceLine } from './inference.mjs';
@@ -51,7 +51,7 @@ import { EventHub, InvalidJsonError, badRequest, error, json, readBody, readRaw,
 import { createUploads } from './chat-uploads.mjs';
 import { createNativeDrops } from './native-drop.mjs';
 import { RequestQueue } from './request-queue.mjs';
-import { selectSkills, skillInstructions } from './skill-selection.mjs';
+import { selectSkills, withSkills, historyWithSkills } from './skill-selection.mjs';
 import { prepareOversized } from './oversize.mjs';
 import { createChatFolders, chatRootOf, openFile, resolveChatFile, previewFile, rawFile, createAttachments } from './chat-files.mjs';
 import { createUserRules, rulesFile } from './user-rules.mjs';
@@ -113,6 +113,14 @@ const WORKSPACE_NAME = process.env.STRATA_WORKSPACE ? basename(WORKSPACE) : 'Str
 /** True for the app's own install/source folder or anything inside it. */
 const insideApp = path => { const rel = relative(ROOT, resolve(path)); return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)); };
 
+const inFlightChatSaves = new Set();
+const trackChatSave = fn => {
+  const p = Promise.resolve().then(fn);
+  const done = p.then(() => {}, () => {});
+  inFlightChatSaves.add(done);
+  done.finally(() => inFlightChatSaves.delete(done));
+  return p;
+};
 const hub = new EventHub();
 /** The chats, as files in the profile's data folder (chat-store.mjs). */
 const chatStore = createChatStore({ dir: store.DATA_DIR, privateDir: makePrivateDir });
@@ -488,7 +496,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
   if(native.hasLive()||nativeModelId){
     let instance;try{instance=native.resolveInstance(nativeModelId??native.state().defaultId);}catch(e){const message=plainNoModel(e.message);onFrame({type:'error',message});return {error:message};}const started=Date.now(),cancel=new AbortController();
     const entry=serving.open({client:client??'Strata chat',endpoint:'/chat/completions',model:instance.apiModelId,instanceId:instance.id,gpuIds:instance.gpus.map(String),cancel:()=>cancel.abort()});
-    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const hy4Local=/^hy4-flash/i.test(String(instance.model??instance.apiModelId??''));const inklingLocal=/^inkling-2-mini/i.test(String(instance.model??instance.apiModelId??''));const effortWord=hy4Local?({off:'none',minimal:'high',low:'high',medium:'high',high:'high',max:'max'}[String(thinking).toLowerCase()]??'high'):inklingLocal?'none':({off:'none',max:'high'}[String(thinking).toLowerCase()]??String(thinking).toLowerCase());const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message,history,images,extra:{...(!inklingLocal&&thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:effortWord},systemPrompt:[systemPrompt.current(),userRules.promptBlock(),skillInstructions(applied)].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
+    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const hy4Local=instance.arch==='hy4flash'||/^hy4-flash/i.test(String(instance.model??instance.apiModelId??''));const inklingLocal=instance.arch==='inkling2_loop'||/^inkling-2-mini/i.test(String(instance.model??instance.apiModelId??''));const thinkKey=String(thinking).toLowerCase();const effortWord=hy4Local?(thinkKey==='xhigh'?'max':({off:'none',minimal:'high',low:'high',medium:'high',high:'high',max:'max'}[String(thinking).toLowerCase()]??'high')):inklingLocal?({off:'none',xhigh:'max',minimal:'minimal'}[thinkKey]??thinkKey):({off:'none',max:'high'}[String(thinking).toLowerCase()]??(thinkKey==='xhigh'?'high':thinkKey));const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message:withSkills(skillState,message,workspaceId),history:historyWithSkills(skillState,history,workspaceId),images,extra:{...(thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:effortWord},systemPrompt:[systemPrompt.current(),userRules.promptBlock()].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
   }
   runtimeState();
   let instance;
@@ -518,7 +526,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
       // Scope is resolved again at dispatch: a disabled skill never stays active
       // merely because the request waited in the queue.
       const appliedSkills = selectSkills(skillState, message, workspaceId);
-      const chatPrompt = [systemPrompt.current(), userRules.promptBlock(), skillInstructions(appliedSkills)].filter(Boolean).join('\n\n');
+      const chatPrompt = [systemPrompt.current(), userRules.promptBlock()].filter(Boolean).join('\n\n');
       serving.mark(entry.id, { state: 'generating' });
       const contextMax = instance.memory.context;
       const modelMonitor=models.REAL?monitor:{
@@ -530,8 +538,8 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
       };
       try {
         result = await streamChat({
-          message,
-          history,
+          message: withSkills(skillState, message, workspaceId),
+          history: historyWithSkills(skillState, history, workspaceId),
           systemPrompt: chatPrompt,
           modelLabel: v.label,
           candidates: readableCandidates(),
@@ -774,8 +782,10 @@ async function api(req, res, path, method, url) {
     try {
       if (!id && method === 'GET') return json(res, 200, chatStore.list());
       if (id === 'import' && method === 'POST') {
-        const body = JSON.parse((await readRaw(req, 512 * 1024 * 1024)).toString('utf8') || '{}');
-        const result = await chatStore.importMany(body.sessions);
+        const result = await trackChatSave(async () => {
+          const body = JSON.parse((await readRaw(req, 512 * 1024 * 1024)).toString('utf8') || '{}');
+          return chatStore.importMany(body.sessions);
+        });
         for (const imported of result.imported) hub.send('chats', { id: imported, rev: chatStore.rev(imported), from });
         return json(res, 200, result);
       }
@@ -787,14 +797,16 @@ async function api(req, res, path, method, url) {
         return undefined;
       }
       if (id && method === 'PUT') {
-        const text = (await readRaw(req, 256 * 1024 * 1024)).toString('utf8');
-        const base = req.headers['x-strata-base-rev'];
-        const saved = await chatStore.save(id, text, { baseRev: typeof base === 'string' && /^\d+$/.test(base) ? Number(base) : null });
+        const saved = await trackChatSave(async () => {
+          const text = (await readRaw(req, 256 * 1024 * 1024)).toString('utf8');
+          const base = req.headers['x-strata-base-rev'];
+          return chatStore.save(id, text, { baseRev: typeof base === 'string' && /^\d+$/.test(base) ? Number(base) : null });
+        });
         hub.send('chats', { id, rev: saved.rev, from });
         return json(res, 200, saved);
       }
       if (id && method === 'DELETE') {
-        const removed = await chatStore.remove(id);
+        const removed = await trackChatSave(() => chatStore.remove(id));
         hub.send('chats', { id, deleted: true, from });
         return json(res, 200, removed);
       }
@@ -810,6 +822,12 @@ async function api(req, res, path, method, url) {
   if(path.startsWith('/api/native')){try{
   if(path==='/api/native'&&method==='GET')return json(res,200,await native.refresh(url.searchParams.get('refresh')==='1'));
   if(path==='/api/native'&&method==='PATCH')return json(res,200,await native.configure(await readBody(req)));
+  if(path==='/api/native/ram-reserve'&&method==='GET')return json(res,200,native.ramReserve());
+  if(path==='/api/native/ram-reserve'&&method==='POST')return json(res,200,native.saveRamReserve((await readBody(req))?.gib));
+  if(path==='/api/native/model-port'&&method==='GET')return json(res,200,native.modelPort());
+  if(path==='/api/native/model-port'&&method==='POST')return json(res,200,native.saveModelPort((await readBody(req))?.port??null));
+  if(path==='/api/native/prompt-cache-spread'&&method==='GET')return json(res,200,native.promptCacheSpread());
+  if(path==='/api/native/prompt-cache-spread'&&method==='POST')return json(res,200,native.savePromptCacheSpread((await readBody(req))?.enabled??null));
   if(path==='/api/native/directory'&&method==='POST')return json(res,200,native.setDownloadDirectory((await readBody(req)).directory));
   /* Settings > Storage > Models folder: pick (or type) a folder, say what it means, then start the choice. Copying is Control's (strata models move). */
   if(path==='/api/native/models-folder/plan'&&method==='POST'){
@@ -839,8 +857,8 @@ async function api(req, res, path, method, url) {
    const file=join(folder,`strata-diagnostics-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.txt`);writeFileSync(file,lines.join(NL),'utf8');
    return json(res,200,{path:file});}
   if(path==='/api/native/local/preview'&&method==='POST'){
-   /* "Use a local GGUF": pick (or type) the folder, and Control says what is in it. Nothing is copied or changed. */
-   const typed=await typedFolder((await readBody(req)).path,{isAbsolute,fileType:/\.gguf$/i});
+   /* "Use a local GGUF": pick (or type) the folder or file (.gguf / .strata), and Control says what is in it. Nothing is copied or changed. */
+   const typed=await typedFolder((await readBody(req)).path,{isAbsolute,fileType:/\.(gguf|strata)$/i});
    const picked=typed?{path:typed}:await chooseFolder('Choose the folder that holds your GGUF files');
    if(picked.unavailable){const u=chooserUnavailable(picked);return error(res,501,u.message,{code:u.code});};
    if(picked.cancelled)return json(res,200,{cancelled:true});
@@ -960,10 +978,16 @@ async function api(req, res, path, method, url) {
     const engine = control ? await control.engine().catch(e => ({ usable: false, notice: e.message })) : null;
     // the first start copies the engine that came with the app (about a minute): say so instead of "no engine"
     if (engine && !engine.usable && !bundledEngineSettled) engine.notice = 'The engine that came with the app is being set up. This takes a minute the first time.';
+    const shapeEngines = Array.isArray(engine?.shapes)
+      ? engine.shapes.map(s => ({ shape: s.shape, component: s.component, usable: s.usable === true, version: s.engine?.version ?? null, backend: s.engine?.backend ?? null }))
+      : [];
+    const anyUsableEngine = Boolean(engine?.usable) || shapeEngines.some(s => s.usable);
     return json(res, 200, {
       packaged: process.env.STRATA_PACKAGED === '1',
       control: control ? { dir: control.control.dir, python: control.control.python, version: control.version, bundle: control.control.bundle } : null,   // control.control: the Control in use now (a first-run update can switch it)
       engine,
+      shapeEngines,
+      anyUsableEngine,
       engineSetup: !bundledEngineSettled,
       componentsDir: componentsDirectory(),
       acquisition: { forbidden: acquisitionForbidden(), env: process.env.STRATA_NO_ACQUIRE ?? null },
@@ -1750,13 +1774,18 @@ server.listen(PORT, HOST, () => {
   if (control && process.env.STRATA_PACKAGED === '1') Promise.resolve(native.refresh(false)).catch(() => { /* the page's own read tells the person */ });
 });
 
+const CHAT_DRAIN_MS = Math.min(15000, Math.max(500, Number(process.env.STRATA_SHUTDOWN_CHAT_DRAIN_MS) || 5000));
 let stopping=false;
 const shutdown = async () => {
   if(stopping)return;stopping=true;
   clearInterval(taskTimer);tasks.close();
   const timeout=setTimeout(()=>process.exit(0),control?45000:10000);timeout.unref();   // stopping an engine through Control: drained (15 s), then ended; the shell's deadline is longer
-  server.close();server.closeAllConnections?.();
+  server.close();
+  // #6661: drain any in-flight or queued chat saves to disk before tearing down sockets and exiting.
+  await drainChatStore(chatStore, { inFlight: inFlightChatSaves, timeoutMs: CHAT_DRAIN_MS });
+  server.closeAllConnections?.();
   await Promise.allSettled([localShare.stop(),cloudflare.stop(),native.close()]);
+  await drainChatStore(chatStore, { timeoutMs: 1000 });
   process.exit(0);
 };
 // Every ordinary way of being told to stop takes the clean path: Ctrl+C, kill, the terminal closing (SIGHUP), Ctrl+Break.

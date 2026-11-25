@@ -271,6 +271,7 @@ test('#4749 the helper strings are translated', async () => {
   setTranslationLanguage('en');
 });
 
+
 // ---------------------------------------------------------------------------------------------------------------------- #4783
 test('#4783 the three choices while an answer is written, as the web chat page has them, and only those three are valid', async () => {
   const { busyPlan, validWhileBusy, WHILE_BUSY } = await load('lib/while-busy.ts');
@@ -293,6 +294,7 @@ test('#4783 the composer acts on the choice, the default keeps today\'s behaviou
   assert.match(store, /\n  whileBusy: 'wait',\n/);
   assert.match(src('screens/Settings.tsx'), /setWhileBusy\(value as typeof prefs\.whileBusy\)/);
 });
+
 
 test('#4783 the new sentences are translated', async () => {
   const { tr, setTranslationLanguage } = await withI18n('format.ts');

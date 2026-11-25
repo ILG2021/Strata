@@ -41,10 +41,10 @@ export function ComposerControls({ session, onPreview, onAttach, onError, onSlas
     attachLatest.current = onAttach;
     const addFilesLatest = useRef<(files: File[]) => Promise<void>>(async () => { });
     const pictures = pictureStatus(native);
-    const isHy4Active = !!nativeModel && /^hy4-flash/i.test(nativeModel.model);
-    const isInklingActive = !!nativeModel && /^inkling-2-mini/i.test(nativeModel.model);
+    const isHy4Active = !!nativeModel && (nativeModel.arch === 'hy4flash' || /^hy4-flash/i.test(nativeModel.model) || /^hy4-flash/i.test(nativeModel.apiModelId ?? ''));
+    const isInklingActive = !!nativeModel && (nativeModel.arch === 'inkling2_loop' || /^inkling-2-mini/i.test(nativeModel.model) || /^inkling-2-mini/i.test(nativeModel.apiModelId ?? ''));   // Inkling's default level is Low (0.2.21)
     const activeEfforts = isHy4Active ? hy4Efforts : efforts;
-    const effort = isInklingActive ? 'Off' : (activeEfforts.includes(session?.preferences?.thinking ?? '') ? session!.preferences!.thinking! : (isHy4Active ? 'High' : 'Medium'));
+    const effort = activeEfforts.includes(session?.preferences?.thinking ?? '') ? session!.preferences!.thinking! : (isHy4Active ? 'High' : isInklingActive ? 'Low' : 'Medium');
     const budget = session?.preferences?.thinkingBudget ?? 0;
     const shortcut = MOD === '⌘' ? '⌘⇧A' : 'Ctrl+Shift+A';
     async function openFile(selected: File | undefined) {
@@ -148,7 +148,7 @@ export function ComposerControls({ session, onPreview, onAttach, onError, onSlas
     <button ref={trigger} className="composer-add" aria-label={tr("Add or open")} title={tr("Add or open")} disabled={reading || streaming} aria-haspopup="menu" aria-expanded={menu} onClick={() => { setPreferences(null); setMenu(v => !v); }}><Icon name="plus" size={22}/></button>
     <DictationControl draft={draft} onDraft={onDraft} sessionId={session?.id} disabled={streaming}/>
     <span className="spacer"/>
-    {isInklingActive ? null : <button ref={thinkingTrigger} className="composer-choice composer-effort" aria-label={tr("Reasoning effort: {0}", [effort])} aria-haspopup="menu" aria-expanded={preferences === 'thinking'} onClick={() => { setMenu(false); setPreferences(v => v === 'thinking' ? null : 'thinking'); }}><Icon name="thinking" size={16}/><span>{tr(effort)}</span><Icon name="chevron" size={13}/></button>}
+    {<button ref={thinkingTrigger} className="composer-choice composer-effort" aria-label={tr("Reasoning effort: {0}", [effort])} aria-haspopup="menu" aria-expanded={preferences === 'thinking'} onClick={() => { setMenu(false); setPreferences(v => v === 'thinking' ? null : 'thinking'); }}><Icon name="thinking" size={16}/><span>{tr(effort)}</span><Icon name="chevron" size={13}/></button>}
     {tr(menu ? <FloatingMenu anchor={trigger.current} title={tr("Add or open")} width={292} onClose={() => setMenu(false)}>
       <button role="menuitem" className="menu__item" onClick={() => { setMenu(false); files.current?.click(); }}><Icon name="attach"/><span>{tr("Add files or photos")}</span><kbd className="menu-shortcut">{tr(shortcut)}</kbd></button>
       <button role="menuitem" className="menu__item" onClick={() => { setMenu(false); folder.current?.click(); }}><Icon name="folder-plus"/>{tr("Add folder")}</button>
