@@ -69,7 +69,8 @@ jobs:
 
       # Only the parts of the toolkit the engine and the picture reader need, from NVIDIA's own redist directory, each checked
       # against the SHA-256 in NVIDIA's manifest. (CUDA 13 splits crt and nvvm out of nvcc: without them nvcc cannot compile.)
-      - name: CUDA ${{ env.CUDA_VERSION }}
+      - &cuda
+        name: CUDA ${{ env.CUDA_VERSION }}
         shell: pwsh
         run: |
           $base = 'https://developer.download.nvidia.com/compute/cuda/redist/'
@@ -97,7 +98,8 @@ jobs:
           if (Test-Path "$env:CUDA_DIR\bin\x64") { "$env:CUDA_DIR\bin\x64" >> $env:GITHUB_PATH }
           & "$env:CUDA_DIR\bin\nvcc.exe" --version
 
-      - name: Ninja
+      - &ninja
+        name: Ninja
         shell: pwsh
         run: |
           # ninja's own release, pinned by SHA-256 (no Chocolatey package in between)
@@ -228,6 +230,91 @@ jobs:
           name: strata-fork-${{ steps.version.outputs.version }}-windows-nvidia
           path: dist/
           retention-days: 7
+
+  # Quick checks, beside the full build: what fails there only after the long engine build fails here first. They publish nothing
+  # and hold no secret; the installer made here has no engine inside, is not signed and is thrown away.
+  quick-app:
+    name: quick check (app, Control, installer script)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '24.22.3'
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca  # stable
+        with:
+          toolchain: stable
+      - name: User interface
+        shell: pwsh
+        run: |
+          npm ci --prefix app/host --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm --prefix app/host run typecheck
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm --prefix app/host run build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --prefix app/desktop --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Node runtime
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File app/desktop/scripts/fetch-node.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Rust (cargo check)
+        shell: pwsh
+        working-directory: app/desktop/src-tauri
+        run: |
+          cargo check --locked
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Control (pinned Python and hash-locked wheels)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python app/desktop/scripts/stage-control.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer script (debug build, no engine, not signed)
+        shell: pwsh
+        working-directory: app/desktop
+        run: |
+          npx tauri build --debug --bundles nsis
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  quick-engine:
+    name: quick check (the engine files the fork changes)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: '3.12'
+      - *cuda
+      - *ninja
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1
+        with:
+          arch: x64
+      # the configure line of tools/packaging/build_cuda_windows.py with two architectures; only these objects, nothing is linked
+      - name: Compile q36_engine.cu and ink_main.cpp
+        shell: pwsh
+        run: |
+          $cuda = $env:CUDA_DIR.Replace('\', '/')
+          cmake -G Ninja -S engine -B build-quick -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_CUDA=ON -DSTRATA_BUILD_TESTS=OFF `
+            -DSTRATA_NATIVE_EXPERTS=ON -DSTRATA_PORTABLE=ON '-DCMAKE_CUDA_ARCHITECTURES=75-real;120-real' `
+            "-DCMAKE_CUDA_COMPILER=$cuda/bin/nvcc.exe" "-DCUDAToolkit_ROOT=$cuda" '-DSTRATA_INK_CUDA_ARCHS=75;120'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $objects = ninja -C build-quick -t targets all | Select-String -Pattern '^(\S*(?:strata_qwen35\.dir\S*q36_engine\.cu|strata-inkling\.dir\S*ink_main\.cpp)\.obj):' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          if (@($objects).Count -ne 2) { throw "Expected two objects, found: $objects" }
+          ninja -C build-quick -k 0 $objects
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
   publish:
     if: github.ref_type == 'tag'
