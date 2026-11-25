@@ -5396,7 +5396,6 @@ struct Serve {
         if (ck) guard_held((int64_t) ids.size());
         if (geni) E.set_images(ir.rows, ir.cell_row, ir.mrope, (int64_t) ids.size(), ir.delta);
         else E.clear_images();
-        const auto t0 = Clock::now();
         const Engine::TierSnap tstart = E.tier_snap();   // S7: the tier's counters for this request alone
         const int64_t fresh = (int64_t) (ids.size() - reuse);
         // the read stops at the system prompt's end and at the last turn boundary for a checkpoint there
