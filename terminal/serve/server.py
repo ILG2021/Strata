@@ -6439,6 +6439,7 @@ class Service:
                                 image_prompt_tokens = int(last.get("prompt_tokens") or 0)
                             self.history.append({
                                 "id": request_id,
+                                "api_request": trace["id"] if trace else None,   # GET /api/requests?id=: its raw input and reply
                                 "projection": (sampling or {}).get("experimental_speed_projection") is not False
                                 if loaded else None,
                                 "time": started, "duration_s": round(time.time() - started, 1), "finish": finish,

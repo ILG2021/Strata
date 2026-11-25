@@ -18,21 +18,21 @@
 # The Node version must satisfy the App Host's own `engines.node` (>= 24.12.0).
 set -euo pipefail
 
-NODE_VERSION="${STRATA_NODE_VERSION:-24.12.0}"
+NODE_VERSION="${STRATA_NODE_VERSION:-24.22.3}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$HERE/../src-tauri/resources/node"
 
 # Published SHA-256 of each official nodejs.org archive, recorded so a tampered or truncated
 # download is refused rather than shipped. Add a row when bumping the version.
-# Taken from nodejs.org's own SHASUMS256.txt for v24.12.0, which is published over HTTPS beside
+# Taken from nodejs.org's own SHASUMS256.txt for v24.22.3, which is published over HTTPS beside
 # the archives. Recorded here so the fetch is verified against a value that does not come from the
 # same response as the payload.
 digest_for() {
   case "$1" in
-    darwin-arm64) echo "319f221adc5e44ff0ed57e8a441b2284f02b8dc6fc87b8eb92a6a93643fd8080" ;;
-    linux-x64)    echo "6159227e0af7d7c3c6bb2fa900452b04a6cb8841a702a79acc613209d70b04d0" ;;
-    linux-arm64)  echo "9b2a2eeb98a8eb37361224e2a1d060300ad2dd143af58dfdb16de785df0f1228" ;;
-    win-x64)      echo "9c125f61ae947b52e779095830f9cac267846a043ef7192183c84016aaad2812" ;;
+    darwin-arm64) echo "ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd" ;;
+    linux-x64)    echo "061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2" ;;
+    linux-arm64)  echo "261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8" ;;
+    win-x64)      echo "e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f" ;;
     *)            echo "" ;;
   esac
 }

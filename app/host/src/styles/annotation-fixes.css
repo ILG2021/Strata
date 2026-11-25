@@ -141,8 +141,6 @@ html[data-motion='reduced'] .tunnel-automatic .tunnel-stage__symbol .st-icon, ht
 .st-composer__bar > .spacer, .chatsplit[data-preview='true'] .st-composer__bar > .spacer { display: block; flex: 1; min-width: 0; }
 /* Stop and Send are the same height: Stop (secondary) was 38px and Send (primary) 32px, so the whole message box moved 5px every time a reply started or ended. */
 .st-composer__bar > .st-btn:not(.st-btn--icon) { height: 32px; min-height: 32px; box-sizing: border-box; }
-.composer-mic { display: grid; place-items: center; flex: none; width: 32px; height: 34px; border: 0; border-radius: 9px; background: transparent; color: var(--st-ink-muted); cursor: pointer; }
-.composer-mic:hover, .composer-mic[aria-pressed='true'] { color: var(--st-accent-text); background: var(--st-surface-2); }
 .composer-mode { max-width: 170px; }
 .composer-mode span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-effort { flex: none; }
@@ -156,15 +154,11 @@ html[data-motion='reduced'] .tunnel-automatic .tunnel-stage__symbol .st-icon, ht
 .composer-mode-option .st-icon, .composer-mode-option kbd { margin-top: 2px; }
 .reasoning-menu-model { display: flex; align-items: center; gap: 8px; padding: 10px 10px 14px; border-bottom: 1px solid var(--st-line); margin-bottom: 12px; color: var(--st-ink); }
 .reasoning-menu-model strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--st-fs-xs); }
-.dictation-preview { text-align: center; padding: 12px 0 4px; }
-.voice-wave { display: flex; justify-content: center; align-items: center; gap: 5px; height: 36px; }
-.voice-wave span { display: block; width: 4px; height: 14px; border-radius: 5px; background: var(--st-accent-text); animation: dictation-wave 1.1s ease-in-out infinite alternate; }
-@keyframes dictation-wave { to { transform: scaleY(2); opacity: .55; } }
 @media (max-width: 767px) { .composer-mode { max-width: 130px; } .chat-model-badge { max-width: 170px; } .chat-agents { gap: 4px; font-size: 11px; } }
-@media (prefers-reduced-motion: reduce) { .voice-wave span, .agent-live-dot { animation: none; } }
-html[data-motion='reduced'] .voice-wave span, html[data-motion='reduced'] .agent-live-dot { animation: none; }
+@media (prefers-reduced-motion: reduce) { .agent-live-dot { animation: none; } }
+html[data-motion='reduced'] .agent-live-dot { animation: none; }
 
-/* Subsequent review: quieter headers, compact confirmations and dictation. */
+/* Subsequent review: quieter headers, compact confirmations. */
 .main__title-line { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .main__title-line .main__title { margin: 0; flex: none; }
 .main__title-detail { font-size: var(--st-fs-xs); color: var(--st-ink-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -199,27 +193,14 @@ html[data-motion='reduced'] .voice-wave span, html[data-motion='reduced'] .agent
 .model-picker-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--st-ink-muted); }
 .model-picker-option[aria-checked='true'] .model-picker-state { color: var(--st-accent-text); }
 .model-picker-manage { border-top: 1px solid var(--st-line); margin-top: 6px; padding-top: 12px; }
-.dictation-feedback { position: fixed; right: 24px; bottom: 110px; width: min(320px, calc(100dvw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; z-index: var(--layer-popover); padding: 16px; border: 1px solid var(--st-line); border-radius: 18px; background: var(--st-surface); box-shadow: var(--st-sh-pop); animation: st-enter 200ms var(--st-ease-enter) both; }
-.dictation-feedback__head { display: flex; align-items: center; gap: 8px; }
-.dictation-feedback__head strong { flex: 1; font-size: var(--st-fs-sm); }
-.dictation-feedback__icon { display: flex; color: var(--st-ink-muted); }
-.dictation-feedback[data-active] .dictation-feedback__icon { color: var(--st-accent-text); }
-.dictation-feedback > p { margin: 12px 0; line-height: 1.5; }
-.dictation-feedback .voice-wave { margin: 12px 0; }
-.dictation-feedback .voice-wave:not([data-speaking]) span { animation-duration: 1.8s; opacity: .5; }
-.dictation-feedback__transcript { max-height: 120px; overflow: auto; font-size: var(--st-fs-sm); }
-.dictation-feedback__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.dictation-feedback__actions kbd { margin-right: auto; color: var(--st-ink-muted); font: inherit; font-size: 11px; }
-.dictation-feedback .dictation-feedback__provider { margin-bottom: 0; }
 @media (max-width: 767px) {
   .skills-header-search.st-input { width: min(160px, 28vw); }
   .main__head:has(.skills-header-search) { height: auto; min-height: var(--st-header-h); flex-wrap: wrap; gap: 10px; }
   .main__head:has(.skills-header-search) .main__actions { flex: 1; justify-content: flex-end; }
-  .dictation-feedback { right: 16px; bottom: 16px; }
   .main__title-line { gap: 8px; }
 }
-@media (prefers-reduced-motion: reduce) { .task-tree-row[data-leaving], .dictation-feedback, .dictation-feedback .voice-wave span { animation: none; } .task-tree-row[data-leaving] { opacity: 0; } }
-html[data-motion='reduced'] .task-tree-row[data-leaving], html[data-motion='reduced'] .dictation-feedback, html[data-motion='reduced'] .dictation-feedback .voice-wave span { animation: none; }
+@media (prefers-reduced-motion: reduce) { .task-tree-row[data-leaving] { animation: none; } .task-tree-row[data-leaving] { opacity: 0; } }
+html[data-motion='reduced'] .task-tree-row[data-leaving] { animation: none; }
 html[data-motion='reduced'] .task-tree-row[data-leaving] { opacity: 0; }
 
 /* Review 32: compact menus, hardware inventory and local usage. */

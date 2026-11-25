@@ -997,6 +997,26 @@ fn devtools_wanted(value: Option<&str>) -> bool {
     value.map(str::trim) == Some("1")
 }
 
+/// WebView2's own traffic (privacy audit 2026-11-25). The page is the host's, on 127.0.0.1, so its browser has nothing to fetch: every other name
+/// and address resolves to nothing, no proxy is used (one would resolve names itself), and Chromium's background services are off.
+/// This replaces wry's default arguments, so the three features wry turns off are listed too. The Edge updater, a separate Windows service, is not
+/// reached by this.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn webview_args() -> String {
+    [
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,OptimizationHints,Translate,AutofillServerCommunication,MediaRouter,NetworkTimeServiceQuerying",
+        "--host-resolver-rules=\"MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost , EXCLUDE *.localhost\"",
+        "--no-proxy-server",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-domain-reliability",
+        "--disable-sync",
+        "--disable-speech-api",
+        "--no-pings",
+    ]
+    .join(" ")
+}
+
 /// The one window, on the host's own origin so the page and its API share an origin exactly as the browser build does.
 #[cfg_attr(windows, allow(unused_variables))]
 fn open_window(app: &tauri::App, port: u16, shell_token: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -1010,6 +1030,8 @@ fn open_window(app: &tauri::App, port: u16, shell_token: &str) -> Result<(), Box
     // drop on (see drop_script and hand_over_drop below).
     #[cfg(windows)]
     let builder = builder.disable_drag_drop_handler();
+    #[cfg(windows)]
+    let builder = builder.additional_browser_args(&webview_args());
     // WebKitGTK (2.50 to 2.52 at least) dereferences a null pointer in AcceleratedBackingStore::update in its UI process when a page calls
     // document.startViewTransition (the web process asks the UI process to enter accelerated compositing, and the backing store is not
     // there). The page itself does not call it on that engine (app/host/src/lib/router.ts), and this line keeps any other script from doing

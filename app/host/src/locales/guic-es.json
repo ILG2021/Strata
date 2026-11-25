@@ -95,5 +95,10 @@
  "guic94": "El modo sin conexión está activado. Desactívalo en Ajustes > Acerca de > Privacidad y vuelve a intentarlo.",
  "guic95": "No se encontró un motor que funcione en este PC. Strata puede consultarlo en github.com; no se descarga nada hasta que lo elijas.",
  "guic96": "Buscar un motor",
- "guic97": "Abre Strata en 127.0.0.1 o localhost."
+ "guic97": "Abre Strata en 127.0.0.1 o localhost.",
+ "guic98": "Respuesta sin procesar",
+ "guic99": "Solo se conservaron los primeros 262 144 caracteres.",
+ "guic100": "El contenido de esta solicitud ya no está en memoria.",
+ "guic101": "El motor no respondió. Inténtalo de nuevo en un momento.",
+ "guic102": "No se conservó el contenido de esta solicitud. Activa «Conservar metadatos de solicitudes de API» en los ajustes del modelo, vuelve a cargarlo y envía un mensaje nuevo. Las últimas 100 solicitudes quedarán solo en memoria hasta que se descargue el modelo."
 }

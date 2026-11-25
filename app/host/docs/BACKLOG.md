@@ -35,7 +35,6 @@ code exists but nothing shows the requirement was met or tested. This is a list 
 | LAN sharing as an explicit opt-in, with a test. | user-feedback-2026-10-06.md; dsh-recon.md |
 | A Windows and Linux save picker for the Monitor image export. | ui-followup-2026-10-06.md |
 | A live Cloudflare tunnel run (only a connector fixture was used). | ui-followup-2026-10-06.md |
-| Live microphone dictation (tested with simulated events only). | annotations-19-2026-10-09.md |
 | One coordinated arrow-key navigation system for menus (optional). | design-improvements, UI-11-12 |
 | Session-log export delivery in a normal browser. | design-improvements, CHAT-08 |
 | Windows and Linux runtime lifecycle, native tool and image grants, privacy and logging, native sensors. | design-improvements, Remaining boundaries 1 |

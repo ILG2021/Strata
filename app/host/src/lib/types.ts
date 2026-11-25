@@ -190,6 +190,8 @@ export interface RuntimeModels {
 }
 
 export interface ServeRequest {
+  /** The engine server's record of this request's raw input and reply; only while its api_monitor setting is on. */
+  apiRequestId?: string | null;
   instanceId?:string;
   gpuIds?:string[];
   id: string;

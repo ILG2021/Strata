@@ -2,7 +2,6 @@ import { tr } from '../lib/i18n';
 import { modelFamilyIcon } from '../lib/model-icons';
 import { useEffect, useRef, useState } from 'react';
 import { FloatingMenu } from './FloatingMenu';
-import { DictationControl } from './DictationControl';
 import { Icon } from './ui';
 import { MOD } from '../lib/commands';
 import { pushToast, setChatPreferences, useStore } from '../lib/store';
@@ -19,9 +18,7 @@ const hy4Efforts = ['Off', 'High', 'Max'];
 const THINKING_BUDGETS: [number, string][] = [[0, 'No limit'], [2048, '2K'], [8192, '8K'], [32768, '32K']];
 const textTypes = /\.(txt|md|markdown|csv|tsx?|jsx?|py|json|css|rs|go|sh|html?|ya?ml|toml|xml|log)$/i;
 const photoTypes = /\.(png|jpe?g|webp|gif|svg)$/i;
-export function ComposerControls({ session, onPreview, onAttach, onError, onSlash, streaming, draft, onDraft }: {
-    draft: string;
-    onDraft: (text: string) => void;
+export function ComposerControls({ session, onPreview, onAttach, onError, onSlash, streaming }: {
     session: Session | null;
     onPreview: (a: PreviewArtifact) => void;
     streaming: boolean;
@@ -146,7 +143,6 @@ export function ComposerControls({ session, onPreview, onAttach, onError, onSlas
     <input ref={folder} type="file" multiple hidden onChange={e => { void addFiles(Array.from(e.target.files ?? []), true); e.target.value = ''; }}/>
     <input ref={previewFile} type="file" hidden onChange={e => { void openFile(e.target.files?.[0]); e.target.value = ''; }}/>
     <button ref={trigger} className="composer-add" aria-label={tr("Add or open")} title={tr("Add or open")} disabled={reading || streaming} aria-haspopup="menu" aria-expanded={menu} onClick={() => { setPreferences(null); setMenu(v => !v); }}><Icon name="plus" size={22}/></button>
-    <DictationControl draft={draft} onDraft={onDraft} sessionId={session?.id} disabled={streaming}/>
     <span className="spacer"/>
     {<button ref={thinkingTrigger} className="composer-choice composer-effort" aria-label={tr("Reasoning effort: {0}", [effort])} aria-haspopup="menu" aria-expanded={preferences === 'thinking'} onClick={() => { setMenu(false); setPreferences(v => v === 'thinking' ? null : 'thinking'); }}><Icon name="thinking" size={16}/><span>{tr(effort)}</span><Icon name="chevron" size={13}/></button>}
     {tr(menu ? <FloatingMenu anchor={trigger.current} title={tr("Add or open")} width={292} onClose={() => setMenu(false)}>

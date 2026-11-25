@@ -605,9 +605,7 @@ body {
   width: calc(36px * var(--st-ui-scale));
   height: calc(36px * var(--st-ui-scale));
 }
-/* Attach and dictate are peers in the same bar: the add button had a filled
-   circle and the microphone was a bare glyph, so one looked like a tool and the
-   other like an ornament. Both are 36px circles now. */
+/* The attach button is a 36px circle. */
 .composer .st-composer__bar > .st-btn--icon {
   width: calc(36px * var(--st-ui-scale));
   height: calc(36px * var(--st-ui-scale));
@@ -616,19 +614,6 @@ body {
 .composer .st-composer__bar > .st-btn--icon:hover:not(:disabled) {
   background: color-mix(in srgb, var(--st-ink) 8%, var(--st-surface));
   color: var(--st-ink);
-}
-.composer-mic {
-  width: calc(36px * var(--st-ui-scale));
-  height: calc(36px * var(--st-ui-scale));
-  border-radius: var(--st-r-pill);
-  background: var(--st-surface-2);
-}
-.composer-mic:hover,
-.composer-mic[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--st-ink) 8%, var(--st-surface));
-}
-.composer-mic[aria-pressed='true'] {
-  color: var(--st-accent-text);
 }
 .composer__inner .st-btn--primary {
   height: calc(36px * var(--st-ui-scale));
@@ -825,7 +810,7 @@ html[data-motion='reduced'] .ws__session .navsession__working svg {
    keeps "what is loaded, what it is doing, and the way out", and the composer
    was trimmed to "the field and Send" — but the chat toolbar (title, model
    picker, Subagents, more) stayed at full height, and the composer still showed
-   attach, dictate, mode and effort. Two bars and five controls in a mode whose
+   attach, mode and effort. Two bars and four controls in a mode whose
    purpose is removing chrome.
 
    The bar already names the model and its state, so the toolbar goes; the field
@@ -834,7 +819,6 @@ html[data-motion='reduced'] .ws__session .navsession__working svg {
   display: none;
 }
 .app[data-focus='true'] .composer-add,
-.app[data-focus='true'] .composer-mic,
 .app[data-focus='true'] .composer-choice,
 .app[data-focus='true'] .folderchip {
   display: none;

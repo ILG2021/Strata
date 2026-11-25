@@ -95,5 +95,10 @@
  "guic94": "O modo offline está ativado. Desative-o em Configurações > Sobre > Privacidade e tente novamente.",
  "guic95": "Nenhum mecanismo funcional foi encontrado neste PC. O Strata pode consultar o github.com; nada é baixado até você escolher.",
  "guic96": "Procurar um mecanismo",
- "guic97": "Abra o Strata em 127.0.0.1 ou localhost."
+ "guic97": "Abra o Strata em 127.0.0.1 ou localhost.",
+ "guic98": "Resposta bruta",
+ "guic99": "Apenas os primeiros 262.144 caracteres foram mantidos.",
+ "guic100": "O conteúdo desta solicitação não está mais na memória.",
+ "guic101": "O mecanismo não respondeu. Tente novamente em instantes.",
+ "guic102": "O conteúdo desta solicitação não foi mantido. Ative “Manter metadados de solicitações da API” nas configurações do modelo, recarregue o modelo e envie uma nova mensagem. As últimas 100 solicitações ficam só na memória até o modelo ser descarregado."
 }

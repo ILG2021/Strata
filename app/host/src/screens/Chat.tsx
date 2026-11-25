@@ -668,7 +668,7 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
             }
         }}/>
           <div className="st-composer__bar">
-            <ComposerControls draft={draft} onDraft={setDraft} session={session} onPreview={onPreview} streaming={streaming} onSlash={() => { setSlashDismissed(false); setSlashOpen(true); requestAnimationFrame(() => textareaRef.current?.focus()); }} onError={setFileError} onAttach={(name, text) => { setDraft(`${draft}${draft ? '\n\n' : ''}Attached ${name}\n\n${text}`); requestAnimationFrame(() => textareaRef.current?.focus()); }}/>
+            <ComposerControls session={session} onPreview={onPreview} streaming={streaming} onSlash={() => { setSlashDismissed(false); setSlashOpen(true); requestAnimationFrame(() => textareaRef.current?.focus()); }} onError={setFileError} onAttach={(name, text) => { setDraft(`${draft}${draft ? '\n\n' : ''}Attached ${name}\n\n${text}`); requestAnimationFrame(() => textareaRef.current?.focus()); }}/>
             {tr(streaming ? (<>{whileBusy !== 'wait' && !!draft.trim() ? <Btn variant="primary" size="sm" icon="send" onClick={onSubmit}>{tr("Send")}</Btn> : null}<Btn variant="secondary" size="sm" icon="stop" onClick={stopStreaming}>{tr("Stop")}</Btn></>) : (<Btn variant="primary" size="sm" icon="send" disabled={(!draft.trim() && !photos.length) || draft.trim() === '/' || !canChat} onClick={onSubmit}>{tr("Send")}</Btn>))}
           </div>
         </div>

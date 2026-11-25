@@ -95,5 +95,10 @@
  "guic94": "Offline mode is on. Turn it off in Settings > About > Privacy, then try again.",
  "guic95": "No working engine was found on this PC. Strata can ask github.com for one; nothing is downloaded until you choose it.",
  "guic96": "Look for an engine",
- "guic97": "Open Strata at 127.0.0.1 or localhost."
+ "guic97": "Open Strata at 127.0.0.1 or localhost.",
+ "guic98": "Raw response",
+ "guic99": "Only the first 262,144 characters were kept.",
+ "guic100": "This request’s content is no longer in memory.",
+ "guic101": "The engine did not answer. Try again in a moment.",
+ "guic102": "This request’s content was not kept. Turn on “Keep API request metadata” in the model’s settings, reload the model and send a new message. The last 100 requests then stay in memory only, until the model is unloaded."
 }

@@ -843,6 +843,7 @@ async function api(req, res, path, method, url) {
   if(path==='/api/native/plan'&&method==='POST')return json(res,200,await native.plan(await readBody(req)));
   if(path==='/api/native/operations'&&method==='POST'){if(storageChanging)return error(res,409,'Wait for the model folder check to finish.');const body=await readBody(req);return json(res,202,native.operation(body.kind,body.args));}
   if(path==='/api/native/engine-restart/dismiss'&&method==='POST')return json(res,200,native.dismissRestart());
+  if(path==='/api/native/request-record'&&method==='GET'){const id=url.searchParams.get('id')??'';if(!/^[0-9a-f]{12}$/.test(id))return error(res,400,'Unknown request.');try{return json(res,200,await native.requestRecord(url.searchParams.get('instanceId')??undefined,id));}catch{return json(res,200,{status:'gone'});}}
   if(path==='/api/native/logs'&&method==='GET')return json(res,200,{logs:native.logs()});
   if(path==='/api/native/logs/save'&&method==='POST'){
    /* Diagnostics to a file: the engine messages the app kept, failed operations, and the tail of each model's server log under Control.
@@ -1742,7 +1743,7 @@ async function staticFile(req, res, path) {
 
   const type = MIME[extname(file)] ?? 'application/octet-stream';
   const size=statSync(file).size;
-  const page=extname(file)==='.html'?{'content-security-policy':contentSecurityPolicy(readFileSync(file,'utf8'))}:{};
+  const page=extname(file)==='.html'?{'content-security-policy':contentSecurityPolicy(readFileSync(file,'utf8')),'permissions-policy':'microphone=(), camera=(), geolocation=()'}:{};
   const headers={...page,'x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-type':type,'cache-control':file.endsWith('index.html')?'no-store':'public, max-age=3600','accept-ranges':'bytes'};
   if(req.headers.range) {
     const match=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range);

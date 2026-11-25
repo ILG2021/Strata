@@ -17,10 +17,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$NodeVersion = if ($env:STRATA_NODE_VERSION) { $env:STRATA_NODE_VERSION } else { '24.12.0' }
+$NodeVersion = if ($env:STRATA_NODE_VERSION) { $env:STRATA_NODE_VERSION } else { '24.22.3' }
 $Target = 'win-x64'
-# SHA-256 of node-v24.12.0-win-x64.zip from nodejs.org's SHASUMS256.txt; keep equal to fetch-node.sh.
-$Expected = '9c125f61ae947b52e779095830f9cac267846a043ef7192183c84016aaad2812'
+# SHA-256 of node-v24.22.3-win-x64.zip from nodejs.org's SHASUMS256.txt; keep equal to fetch-node.sh.
+$Expected = 'e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f'
 if (-not $Dest) { $Dest = Join-Path $PSScriptRoot '..\src-tauri\resources\node' }
 $Installed = Join-Path $Dest 'node.exe'
 
@@ -49,7 +49,7 @@ try {
         Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Zip
     }
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLowerInvariant()
-    if ($NodeVersion -ne '24.12.0') {
+    if ($NodeVersion -ne '24.22.3') {
         # another version has no recorded digest: say so rather than implying a verification
         [Console]::Error.WriteLine("fetch-node: WARNING - no recorded digest for v$NodeVersion; this download is NOT authenticated.")
         [Console]::Error.WriteLine("fetch-node: computed sha256 $Actual - record it in this script and fetch-node.sh.")

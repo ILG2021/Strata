@@ -95,5 +95,10 @@
  "guic94": "Der Offline-Modus ist aktiv. Schalten Sie ihn unter Einstellungen > Info > Datenschutz aus und versuchen Sie es erneut.",
  "guic95": "Auf diesem PC wurde keine funktionierende Engine gefunden. Strata kann bei github.com danach fragen; nichts wird heruntergeladen, bevor Sie es auswählen.",
  "guic96": "Nach einer Engine suchen",
- "guic97": "Öffnen Sie Strata unter 127.0.0.1 oder localhost."
+ "guic97": "Öffnen Sie Strata unter 127.0.0.1 oder localhost.",
+ "guic98": "Rohantwort",
+ "guic99": "Nur die ersten 262.144 Zeichen wurden behalten.",
+ "guic100": "Der Inhalt dieser Anfrage ist nicht mehr im Speicher.",
+ "guic101": "Die Engine hat nicht geantwortet. Versuchen Sie es gleich noch einmal.",
+ "guic102": "Der Inhalt dieser Anfrage wurde nicht behalten. Aktivieren Sie „API-Anfragemetadaten speichern“ in den Modelleinstellungen, laden Sie das Modell neu und senden Sie eine neue Nachricht. Die letzten 100 Anfragen bleiben dann nur im Speicher, bis das Modell entladen wird."
 }
