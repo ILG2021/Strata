@@ -525,7 +525,7 @@ trained with, not a hard token limit.
 
 All are optional. Setup rewrites the config when run again and keeps keys it does not manage. The About tab's Model settings
 card edits some of them (the sampling defaults, `reasoning_budget_tokens`, `fit_max_tokens`, `anthropic_thinking`,
-`effort_position`, `aliases`, `idle_unload_s`, `lazy_load`, `engine_silence_s`, `api_monitor`, `open_browser` and
+`effort_position`, `aliases`, `idle_unload_s`, `lazy_load`, `engine_silence_s`, `open_browser` and
 `--vram-reserve-mib`). An empty field removes the key, the earlier file is kept as `strata-<model>.json.bak`, and the change
 applies at the next start. Network, key, MCP and program keys are not editable there.
 
@@ -551,7 +551,6 @@ applies at the next start. Network, key, MCP and program keys are not editable t
 | `fit_max_tokens` | `true` | A request whose `max_tokens` runs past the context gets it shortened to the room left. `false` (or `--no-fit-max-tokens`) returns 400 instead. A prompt that leaves no room is always refused. |
 | `engine_silence_s` | `300` | Ends the engine after this many seconds without a line during a request (`0` = wait forever). While a prompt is read, each chunk may take three times the previous one's time. |
 | `parallel` | `1` | Up to N requests decoded together in batch slots ([BATCHING.md](BATCHING.md)). |
-| `api_monitor` | off | Records requests for `/api-monitor`. |
 | `lazy_load` | off | Start without loading the model. |
 | `slot_save_path` | none | Enables session files. |
 | `host`, `api_key`, `api_keys`, `cors_origins`, `trusted_origins`, `allowed_hosts` | local only | See [Network access](#network-access). |
@@ -998,8 +997,7 @@ screenshots.
 
 ### API request monitor
 
-Off by default, because it keeps prompts and answers in memory. Turn it on with `"api_monitor": true` or
-`terminal/serve/server.py --api-monitor`; otherwise the two endpoints answer 404. `/api-monitor` shows the model state, load and unload
+Always on in this fork (the `api_monitor` config key and `--api-monitor` are ignored). `/api-monitor` shows the model state, load and unload
 controls, active and queued requests, request bodies, output, separate reasoning and response bodies, with load, queue,
 first-token and decode timings. `GET /api/requests` returns summaries and `GET /api/requests?id=<id>` one request. The
 monitor keeps the newest 100 requests in memory until restart, 262,144 characters per field, with visible truncation flags.

@@ -28,10 +28,10 @@ class ReloadableEngine(MockEngine):
         self.running, self.unloaded = True, False
 
 
-class MonitorOff(unittest.TestCase):
-    """#332 is opt-in: by default no prompt or answer is kept, and the monitor's endpoints do not exist."""
+class MonitorOn(unittest.TestCase):
+    """Strata-fork: #332 is always on, with no setting: every request is kept and the monitor's endpoints exist."""
 
-    def test_off_by_default(self):
+    def test_on_by_default(self):
         tok = ByteTokenizer()
         svc = Service(MockEngine(tok, "Hello.", max_context=4096), tok,
                       ChatTemplate(Path(__file__).parent / "chat_template.jinja"))
@@ -42,12 +42,10 @@ class MonitorOff(unittest.TestCase):
                                          data=json.dumps({"messages": [{"role": "user", "content": "secret"}]}).encode())
             with urllib.request.urlopen(req, timeout=10) as r:
                 self.assertEqual(r.status, 200)
-            self.assertEqual(len(svc.api_requests), 0)
+            self.assertEqual(len(svc.api_requests), 1)
             for path in ("/api/requests", "/api-monitor"):
-                with self.assertRaises(urllib.error.HTTPError) as e:
-                    urllib.request.urlopen(base + path, timeout=10)
-                self.assertEqual(e.exception.code, 404, path)
-                e.exception.close()
+                with urllib.request.urlopen(base + path, timeout=10) as r:
+                    self.assertEqual(r.status, 200, path)
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -58,7 +56,6 @@ class Monitor(unittest.TestCase):
         self.tok = ByteTokenizer()
         self.engine = ReloadableEngine(self.tok, "Thought.</think>\nHello <script>alert(1)</script>.", max_context=16384)
         self.svc = Service(self.engine, self.tok, ChatTemplate(Path(__file__).parent / "chat_template.jinja"))
-        self.svc.api_monitor = True                       # opt-in ("api_monitor": true / --api-monitor)
         self.httpd = serve(self.svc, port=0)
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
 

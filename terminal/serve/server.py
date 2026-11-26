@@ -4231,9 +4231,9 @@ class Service:
         self.client_disconnect_cancels = 0
         self.draining = False
         self.active_cancels: set[threading.Event] = set()
-        # #332: the API request monitor (/api-monitor) keeps the last 100 requests' prompts and answers in memory,
-        # so it is off unless the config's "api_monitor" (or --api-monitor) turns it on
-        self.api_monitor = False
+        # #332: the API request monitor (/api-monitor) keeps the last 100 requests' prompts and answers in memory.
+        # Strata-fork: always on (Monitor > Recent requests > View reads it); no setting turns it off
+        self.api_monitor = True
         self.api_requests = collections.deque(maxlen=100)  # bounded I/O in memory; no headers or API keys
         self.request_trace = threading.local()
         self.history = collections.deque(maxlen=500)    # the last finished requests, newest last (GET /metrics)
@@ -9069,8 +9069,7 @@ def _main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> i
                          "also \"api_key\": \"none\" in the config). Warns once, never refuses")
     ap.add_argument("--lazy", action="store_true", help="start the API unloaded (the engine and the vision encoder start with the first request)")
     ap.add_argument("--api-monitor", action="store_true",
-                    help="the API request monitor at /api-monitor: keeps the last 100 requests' prompts and answers in "
-                         "memory (also \"api_monitor\": true in the config; off by default)")
+                    help=argparse.SUPPRESS)        # accepted for old launch lines: the API request monitor is always on
     ap.add_argument("--strict-model", action="store_true",
                     help="reject requests whose 'model' is not the loaded model or an alias "
                          "(also \"strict_model\": true in the config or $STRATA_STRICT_MODEL=1)")
@@ -9462,7 +9461,7 @@ def _main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> i
     if svc.allowed_hosts:
         print("[strata] Host check off: any name reaches this server (allowed_hosts \"*\")" if "*" in svc.allowed_hosts
               else f"[strata] also answers to the host names {', '.join(svc.allowed_hosts)} (allowed_hosts)", flush=True)
-    svc.api_monitor = a.api_monitor or cfg.get("api_monitor") is True
+    svc.api_monitor = True                     # Strata-fork: always on; the config's "api_monitor" is ignored
     if svc.api_monitor:
         print("[strata] API request monitor on (/api-monitor): the last 100 requests' prompts and answers are kept in "
               "memory" + ("" if svc.api_key else "; anyone who can reach this server can read them (no API key)"),

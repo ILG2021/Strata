@@ -136,7 +136,7 @@ settings? Answers in progress stop." With `--no-tui` the command refuses with on
 
 Settings you want for every model and preset can go in one file, `run-defaults.json`, next to the `launch-presets` folder: `~/.config/strata/run-defaults.json` on Linux and macOS, `%APPDATA%\Strata\run-defaults.json` on Windows. Without the file nothing changes.
 
-It holds one JSON object with server settings only: the keys of the web page's Settings view (`sampling` with `temperature`, `top_p`, `top_k`, `min_p`; `reasoning_budget_tokens`, `fit_max_tokens`, `anthropic_thinking`, `effort_position`, `aliases`, `idle_unload_s`, `lazy_load`, `engine_silence_s`, `api_monitor`) and `undeclared_tool_calls` (`"text"` or `"call"`). Each value is checked with the Settings view's rules; a key that is not allowed or has a wrong value is skipped and named at the start, the others still apply. Engine options and `mtp` do not go here.
+It holds one JSON object with server settings only: the keys of the web page's Settings view (`sampling` with `temperature`, `top_p`, `top_k`, `min_p`; `reasoning_budget_tokens`, `fit_max_tokens`, `anthropic_thinking`, `effort_position`, `aliases`, `idle_unload_s`, `lazy_load`, `engine_silence_s`) and `undeclared_tool_calls` (`"text"` or `"call"`). Each value is checked with the Settings view's rules; a key that is not allowed or has a wrong value is skipped and named at the start, the others still apply. Engine options and `mtp` do not go here.
 
 ```json
 { "undeclared_tool_calls": "call", "sampling": { "temperature": 0.6 } }

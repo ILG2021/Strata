@@ -327,10 +327,10 @@ class RunConfig(unittest.TestCase):
     def test_settings_view_values_survive_the_next_launch(self):
         # About > Settings on the web page writes into the config this model started with (serve/runconfig.py saves there).
         # The next `strata launch` rebuilds that file from the installed one: a saved value must not quietly revert there.
-        prev = {**self.BASE, "idle_unload_s": 300, "reasoning_budget_tokens": 4000, "api_monitor": True,
+        prev = {**self.BASE, "idle_unload_s": 300, "reasoning_budget_tokens": 4000, "engine_silence_s": 600,
                 "sampling": {"temperature": 0.4}}
         cfg = derive_config(self.BASE, S.LaunchSettings(), bool_flags=frozenset(), prev=prev)
-        self.assertEqual((cfg["idle_unload_s"], cfg["reasoning_budget_tokens"], cfg["api_monitor"]), (300, 4000, True))
+        self.assertEqual((cfg["idle_unload_s"], cfg["reasoning_budget_tokens"], cfg["engine_silence_s"]), (300, 4000, 600))
         self.assertEqual(cfg["sampling"], {"temperature": 0.4})
         self.assertEqual(cfg["args"], [*self.BASE["args"], "--prompt-cache-spread"])  # #6469 spread enabled by default; no other args added
         plain = derive_config(self.BASE, S.LaunchSettings(), bool_flags=frozenset())    # no earlier start: nothing to carry

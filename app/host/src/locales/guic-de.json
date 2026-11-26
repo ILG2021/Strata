@@ -100,5 +100,5 @@
  "guic99": "Nur die ersten 262.144 Zeichen wurden behalten.",
  "guic100": "Der Inhalt dieser Anfrage ist nicht mehr im Speicher.",
  "guic101": "Die Engine hat nicht geantwortet. Versuchen Sie es gleich noch einmal.",
- "guic102": "Der Inhalt dieser Anfrage wurde nicht behalten. Aktivieren Sie „API-Anfragemetadaten speichern“ in den Modelleinstellungen, laden Sie das Modell neu und senden Sie eine neue Nachricht. Die letzten 100 Anfragen bleiben dann nur im Speicher, bis das Modell entladen wird."
+ "guic102": "Der Inhalt dieser Anfrage wurde nicht behalten. Die letzten 100 Anfragen bleiben nur im Arbeitsspeicher, bis das Modell entladen wird."
 }

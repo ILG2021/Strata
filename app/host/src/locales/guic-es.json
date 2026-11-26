@@ -100,5 +100,5 @@
  "guic99": "Solo se conservaron los primeros 262 144 caracteres.",
  "guic100": "El contenido de esta solicitud ya no está en memoria.",
  "guic101": "El motor no respondió. Inténtalo de nuevo en un momento.",
- "guic102": "No se conservó el contenido de esta solicitud. Activa «Conservar metadatos de solicitudes de API» en los ajustes del modelo, vuelve a cargarlo y envía un mensaje nuevo. Las últimas 100 solicitudes quedarán solo en memoria hasta que se descargue el modelo."
+ "guic102": "No se conservó el contenido de esta solicitud. Las últimas 100 solicitudes se guardan solo en memoria, hasta que se descarga el modelo."
 }

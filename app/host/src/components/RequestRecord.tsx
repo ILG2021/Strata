@@ -38,7 +38,7 @@ export function RequestRecord({ request, onClose }: { request: ServeRequest; onC
         {record.response ? <Raw title="Raw response" text={record.response} cut={record.response_truncated}/> : null}
         <Raw title="Details" text={JSON.stringify(rest, null, 2)}/>
       </div> : <p role="status">{tr(loaded.status === 'loading' ? 'Loading…'
-            : loaded.status === 'off' ? 'This request’s content was not kept. Turn on “Keep API request metadata” in the model’s settings, reload the model and send a new message. The last 100 requests then stay in memory only, until the model is unloaded.'
+            : loaded.status === 'off' ? 'This request’s content was not kept. The last 100 requests stay in memory only, until the model is unloaded.'
             : loaded.status === 'gone' ? 'This request’s content is no longer in memory.' : 'The engine did not answer. Try again in a moment.')}</p>}
     </Dialog>;
 }

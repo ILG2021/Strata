@@ -100,5 +100,5 @@
  "guic99": "Only the first 262,144 characters were kept.",
  "guic100": "This request’s content is no longer in memory.",
  "guic101": "The engine did not answer. Try again in a moment.",
- "guic102": "This request’s content was not kept. Turn on “Keep API request metadata” in the model’s settings, reload the model and send a new message. The last 100 requests then stay in memory only, until the model is unloaded."
+ "guic102": "This request’s content was not kept. The last 100 requests stay in memory only, until the model is unloaded."
 }

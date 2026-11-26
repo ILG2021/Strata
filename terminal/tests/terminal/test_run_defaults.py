@@ -66,13 +66,13 @@ class RunDefaults(unittest.TestCase):
         self.assertNotIn("idle_unload_s", cfg)
 
     def test_a_settings_view_change_stays_and_a_changed_defaults_file_takes_effect(self):
-        self.write({"reasoning_budget_tokens": 4000, "api_monitor": True})
+        self.write({"reasoning_budget_tokens": 4000, "lazy_load": True})
         first, _ = self.derive()
-        prev = {**first, "api_monitor": False}                                        # the Settings view changed one of them since
-        self.write({"reasoning_budget_tokens": 8000, "api_monitor": True})            # and the person edited the defaults file
+        prev = {**first, "lazy_load": False}                                        # the Settings view changed one of them since
+        self.write({"reasoning_budget_tokens": 8000, "lazy_load": True})            # and the person edited the defaults file
         second, _ = self.derive(prev=prev)
         self.assertEqual(second["reasoning_budget_tokens"], 8000)                     # from the file as it is now, not frozen by the carry-over
-        self.assertIs(second["api_monitor"], False)                                   # the Settings view's own change stays
+        self.assertIs(second["lazy_load"], False)                                   # the Settings view's own change stays
 
     def test_a_bad_key_is_skipped_and_said_the_rest_apply(self):
         self.write({"undeclared_tool_calls": "maybe", "mtp": False, "open_browser": True, "--spec": 4, "idle_unload_s": 120,

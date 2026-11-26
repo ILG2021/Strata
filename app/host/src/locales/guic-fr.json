@@ -100,5 +100,5 @@
  "guic99": "Seuls les 262 144 premiers caractères ont été conservés.",
  "guic100": "Le contenu de cette requête n’est plus en mémoire.",
  "guic101": "Le moteur n’a pas répondu. Réessayez dans un instant.",
- "guic102": "Le contenu de cette requête n’a pas été conservé. Activez « Conserver les métadonnées des requêtes API » dans les paramètres du modèle, rechargez le modèle et envoyez un nouveau message. Les 100 dernières requêtes restent alors uniquement en mémoire, jusqu’au déchargement du modèle."
+ "guic102": "Le contenu de cette requête n’a pas été conservé. Les 100 dernières requêtes restent uniquement en mémoire, jusqu’au déchargement du modèle."
 }

@@ -226,13 +226,6 @@
       "supported": true
     },
     {
-      "id": "api_monitor",
-      "label": "Keep API request metadata",
-      "group": "Recovery",
-      "type": "boolean",
-      "supported": true
-    },
-    {
       "id": "layer_split",
       "label": "Layer split",
       "group": "GPU & memory",

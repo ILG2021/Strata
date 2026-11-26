@@ -100,5 +100,5 @@
  "guic99": "Apenas os primeiros 262.144 caracteres foram mantidos.",
  "guic100": "O conteúdo desta solicitação não está mais na memória.",
  "guic101": "O mecanismo não respondeu. Tente novamente em instantes.",
- "guic102": "O conteúdo desta solicitação não foi mantido. Ative “Manter metadados de solicitações da API” nas configurações do modelo, recarregue o modelo e envie uma nova mensagem. As últimas 100 solicitações ficam só na memória até o modelo ser descarregado."
+ "guic102": "O conteúdo desta solicitação não foi mantido. As últimas 100 solicitações ficam apenas na memória, até o modelo ser descarregado."
 }
