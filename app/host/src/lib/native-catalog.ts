@@ -21,6 +21,13 @@ export const hasKvChoice=(group?:string)=>group!=='qwen3.6'&&group!==HY4_FAMILY&
 export const HY4_FAMILY='hy4-flash';
 /** Thinking Machines Inkling-2-Mini (setup.py INKLING_FAMILIES, its own shape engine strata-inkling). */
 export const INKLING_FAMILY='inkling-2-mini';
+/** Fork: model families kept out of the model menus (first-run setup, the Models screen) until their engines are steady and
+ * fast on the fork's cards (2026-11-27).  Installed ones still get their names and can be deleted (those screens use
+ * nativeCatalogModels).  Empty the set to offer them again. */
+export const HIDDEN_FAMILIES = new Set<string>([HY4_FAMILY, INKLING_FAMILY]);
+/** nativeCatalogModels without HIDDEN_FAMILIES: what the model menus offer. */
+export const visibleCatalogModels = (families: NativeFamily[]): CatalogModel[] =>
+  nativeCatalogModels(families).filter(group => !HIDDEN_FAMILIES.has(group.family));
 /** Display groups are distinct from the engine's installation family IDs. */
 export function nativeCatalogModels(families:NativeFamily[]):CatalogModel[]{
  if(!families.length)return[];

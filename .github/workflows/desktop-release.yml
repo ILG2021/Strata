@@ -14,6 +14,7 @@ name: Desktop release (Windows, NVIDIA)
 # Nothing here needs the feed key: the engine and Control ship inside the installer, and the app updates only through Tauri.
 # The fork publishes no update feed, so the engines of models that run on a program of their own ship inside the installer too:
 # Inkling-2-Mini's strata-inkling goes in engine-bundle/shapes/inkling2/ and the app puts it where Control looks on first start.
+# (Off for now: BUNDLE_INKLING below.  Hy4-Flash's strata-hy4 was never bundled.)
 
 on:
   push:
@@ -32,6 +33,7 @@ env:
   CUDA_VERSION: '13.0.2'
   CUDA_DIR: 'C:\cuda'
   ARCHS: '75;86;89;120'
+  BUNDLE_INKLING: 'false'   # Inkling-2-Mini's engine: not built or bundled for now (see its step)
 
 jobs:
   windows-nvidia:
@@ -135,7 +137,10 @@ jobs:
       # strata-inkling: Inkling-2-Mini's own engine program (engine/src/inkling2, component strata-inkling). Built in the engine's build tree,
       # packaged as the shape engine inkling2 (package_engine.py --shape: the CUDA DLLs it imports are copied in, and the OpenMP runtime
       # from the VC redist folder), checked, and bundled under engine-bundle/shapes/inkling2 (app/host/server/bundled-engine.mjs).
+      # Off for now (2026-11-27): Inkling-2-Mini is out of the model menus until it is steady and fast on 8 GB cards
+      # (app/host/src/lib/native-catalog.ts HIDDEN_FAMILIES); set BUNDLE_INKLING to 'true' to build and bundle it again.
       - name: Inkling-2-Mini engine (CUDA 13)
+        if: env.BUNDLE_INKLING == 'true'
         shell: pwsh
         env:
           OUT: ${{ runner.temp }}\inkling-out
@@ -302,6 +307,7 @@ jobs:
         with:
           arch: x64
       # the configure line of tools/packaging/build_cuda_windows.py with two architectures; only these objects, nothing is linked
+      # (ink_main.cpp only while BUNDLE_INKLING is 'true')
       - name: Compile q36_engine.cu and ink_main.cpp
         shell: pwsh
         run: |
@@ -312,7 +318,9 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $objects = ninja -C build-quick -t targets all | Select-String -Pattern '^(\S*(?:strata_qwen35\.dir\S*q36_engine\.cu|strata-inkling\.dir\S*ink_main\.cpp)\.obj):' |
             ForEach-Object { $_.Matches[0].Groups[1].Value }
-          if (@($objects).Count -ne 2) { throw "Expected two objects, found: $objects" }
+          if ($env:BUNDLE_INKLING -ne 'true') { $objects = @($objects | Where-Object { $_ -notmatch 'strata-inkling' }) }
+          $want = if ($env:BUNDLE_INKLING -eq 'true') { 2 } else { 1 }
+          if (@($objects).Count -ne $want) { throw "Expected $want objects, found: $objects" }
           ninja -C build-quick -k 0 $objects
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 

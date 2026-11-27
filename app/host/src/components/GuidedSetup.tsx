@@ -20,14 +20,14 @@ import { FirstRunLanguage } from './FirstRunLanguage';
 import { DownloadParts } from './DownloadParts';
 import { EngineWarning } from './EngineWarning';
 import { OTHER_NOTE, PICK_NOTE, cardRoomGb, recommendedVersions } from '../lib/native-fit';
-import { nativeCatalogModels, catalogVersionLabel, startingChoice, HY4_FAMILY, INKLING_FAMILY } from '../lib/native-catalog';
+import { visibleCatalogModels, catalogVersionLabel, startingChoice, HY4_FAMILY, INKLING_FAMILY } from '../lib/native-catalog';
 type Choices = NonNullable<NonNullable<SetupState['choices']>['onboarding']>;
 function radioKeys(event: KeyboardEvent<HTMLDivElement>) { if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key))
     return; event.preventDefault(); const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]')); const current = items.indexOf(event.target as HTMLButtonElement); const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + items.length) % items.length; items[next]?.focus(); items[next]?.click(); }
 const steps = ['Welcome', 'Your model', 'Prepare', 'Make it yours'];
 export function GuidedSetup() {
     const native = useNative(), setup = useStore(s => s.setup), hardware = useStore(s => s.hardware);
-    const families = nativeCatalogModels(native?.catalog?.families ?? []);
+    const families = visibleCatalogModels(native?.catalog?.families ?? []);
     const saved = !setup?.complete && !setup?.choices?.onboarding?.manual ? setup?.choices?.onboarding : undefined;
     const [step, setStep] = useState(saved?.manual || setup?.complete ? 1 : saved?.step ?? 1);
     /* Only what the person (or an earlier visit) chose is state. Until then the start is worked out from the catalog on every render: a model already

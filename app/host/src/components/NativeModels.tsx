@@ -34,7 +34,7 @@ import { NativePresets } from './NativePresets';
 import { NativeTune } from './NativeTune';
 import { NativeTuneBadge } from './NativeTuneBadge';
 import { commitWarning } from '../lib/commit-warning';
-import { nativeCatalogModels, catalogVersionLabel, fetchesPictures, hasKvChoice, HY4_FAMILY, INKLING_FAMILY } from '../lib/native-catalog';
+import { visibleCatalogModels, catalogVersionLabel, fetchesPictures, hasKvChoice, HY4_FAMILY, INKLING_FAMILY } from '../lib/native-catalog';
 export function NativeModels({ onOtherModels, onReady, onImport, onConnectEngine }: {
     onOtherModels: () => void;
     onImport?: () => void;
@@ -52,7 +52,7 @@ export function NativeModels({ onOtherModels, onReady, onImport, onConnectEngine
     const [toastedJob, setToastedJob] = useKept('models.toasted', ''), [appliedSig, setAppliedSig] = useKept('models.applied', '');
     const presetPending = useRef(false), visionPicks = useRef(new Map<string, string>());   // Read pictures per version: what the person set, or what the version opened with; later reports of the host never overwrite it
     const [deleting, setDeleting] = useState<string | null>(null);
-    const families = nativeCatalogModels(native?.catalog?.families ?? []);
+    const families = visibleCatalogModels(native?.catalog?.families ?? []);
     const expertSection = useRef<HTMLElement>(null);
     // The card is inserted above the fold and the browser's scroll anchoring
     // immediately compensates by scrolling down, which cancelled the smooth
