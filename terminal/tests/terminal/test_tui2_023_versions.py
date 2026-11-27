@@ -37,19 +37,19 @@ class VersionBump(unittest.TestCase):
         # 0.2.16 (the layout, own-stack and GUI / TUI release): the app and the Terminal are 0.2.16, Control and the engine packages 0.1.62 (0.1.61 went out as Control with 0.2.15 and is skipped as an engine number).
         # 0.2.21.1 (Control-only: the Inkling planner on HIP #7022, the install folder #7012): the Terminal is 0.2.21.1 and Control 0.1.68; the app stays 0.2.21 and every engine package 0.1.67 (the v0.2.21 files).
         self.assertEqual(strata_cli.PRODUCT_VERSION, "1.0.0")   # the ILG2021 fork numbers its own releases from 1.0.0
-        self.assertEqual(strata_cli.version(), "0.1.68")              # the CMake project version: Control
-        self.assertEqual(first("../engine/CMakeLists.txt", r"^project\(strata VERSION ([0-9.]+) "), "0.1.68")
+        self.assertEqual(strata_cli.version(), "0.1.68.1")              # the CMake project version: Control
+        self.assertEqual(first("../engine/CMakeLists.txt", r"^project\(strata VERSION ([0-9.]+) "), "0.1.68.1")
         self.assertIn('STRATA_VERSION="0.1.67-metal"', (ROOT.parent / "engine" / "metal" / "CMakeLists.txt").read_text(encoding="utf-8"))
 
     def test_every_place_the_app_version_lives_says_0_2_3(self):
-        self.assertEqual(first("../app/desktop/src-tauri/Cargo.toml", r'^version = "([^"]+)"'), "1.0.5")
+        self.assertEqual(first("../app/desktop/src-tauri/Cargo.toml", r'^version = "([^"]+)"'), "1.0.6")
         lock = (ROOT.parent / "app" / "desktop" / "src-tauri" / "Cargo.lock").read_text(encoding="utf-8")
-        self.assertRegex(lock, r'name = "strata-desktop"\r?\nversion = "1.0.5"')
-        self.assertEqual(json.loads((ROOT.parent / "app" / "desktop" / "package.json").read_text(encoding="utf-8"))["version"], "1.0.5")
+        self.assertRegex(lock, r'name = "strata-desktop"\r?\nversion = "1.0.6"')
+        self.assertEqual(json.loads((ROOT.parent / "app" / "desktop" / "package.json").read_text(encoding="utf-8"))["version"], "1.0.6")
         host = json.loads((ROOT.parent / "app" / "host" / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(host["version"], "1.0.5")
+        self.assertEqual(host["version"], "1.0.6")
         locked = json.loads((ROOT.parent / "app" / "host" / "package-lock.json").read_text(encoding="utf-8"))
-        self.assertEqual((locked["version"], locked["packages"][""]["version"]), ("1.0.5", "1.0.5"))
+        self.assertEqual((locked["version"], locked["packages"][""]["version"]), ("1.0.6", "1.0.6"))
 
     def test_the_documents_that_state_the_current_version_agree(self):
         self.assertIn("Version 0.2.21, engine 0.1.67.", (ROOT.parent / "AGENTS.md").read_text(encoding="utf-8"))
@@ -61,7 +61,7 @@ class VersionBump(unittest.TestCase):
     def test_version_prints_the_product_and_the_build(self):
         done = subprocess.run([sys.executable, str(ROOT / "strata.py"), "--version"], capture_output=True, text=True, cwd=str(ROOT),
                               env={**os.environ, "STRATA_NO_HANDOVER": "1"})
-        self.assertTrue(done.stdout.startswith("strata 1.0.0 (build 0.1.68;"), done.stdout)
+        self.assertTrue(done.stdout.startswith("strata 1.0.0 (build 0.1.68.1;"), done.stdout)
 
 
 class UpdateFromTheLastRelease(test_updater.UpdaterCase):
