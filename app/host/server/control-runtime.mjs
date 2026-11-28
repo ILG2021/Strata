@@ -148,6 +148,8 @@ export class ControlError extends Error {
  */
 const BOOT = {
   pictures: 'import os,sys;sys.path.insert(0,os.getcwd());from strata_control import pictures;sys.exit(pictures.main(sys.argv[1:]))',
+  // fork: tools/q36_fast_requant.py (a Qwen3.6 GGUF's IQ4_XS / Q4_K downs into the formats of the fast prompt kernels)
+  fastrequant: 'import os,sys;sys.path.insert(0,os.path.join(os.getcwd(),"tools"));import q36_fast_requant as m;sys.exit(m.main(sys.argv[1:]))',
 };
 
 /** Run one CLI command of Control (or, with `boot`, one of its modules). Resolves { code, json, text, stderr }; rejects only if it cannot start or times out. */
@@ -441,6 +443,20 @@ export function createControl({ control = findControl(), env = process.env, run 
       const result = await call(args, { timeoutMs: 3 * 3600_000, acquire: true, boot: 'pictures', onLine: onEvent ?? (() => {}), signal });
       if (result.json?.ok) return result.json;
       throw Object.assign(new ControlError(result.json?.error?.message ?? (result.stderr.split(/\r?\n/).filter(Boolean).pop() || 'The picture files could not be downloaded.'), { exitCode: result.code, output: result.json }), { code: result.json?.error?.code ?? 'failed' });
+    },
+    /** Fork: whether a Qwen3.6 GGUF has down projections q36_fast_requant.py would convert. Resolves { code: 0 nothing | 1 would convert | 2 not
+     * a Qwen3.6 file, convert, slow, layers }; reads the file's header only, never the network. */
+    async fastRequantCheck(src) {
+      const result = await call([src, '--check', '--json'], { timeoutMs: 120_000, boot: 'fastrequant' });
+      return result.json ?? { code: 2, error: result.stderr.split(/\r?\n/).filter(Boolean).pop() || 'the check did not answer' };
+    },
+    /** Fork: write the converted file `out` from `src` (a few minutes; local only). `onEvent` gets { progress } lines. Resolves the result record
+     * { done, converted, slow, bytes, seconds }; a failure is a ControlError. */
+    async fastRequant(src, out, { onEvent = null, signal = null } = {}) {
+      const result = await call([src, out, '--json'], { timeoutMs: 3 * 3600_000, boot: 'fastrequant', onLine: onEvent ?? (() => {}), signal });
+      if (result.json?.done) return result.json;
+      throw new ControlError(result.json?.error ?? (result.stderr.split(/\r?\n/).filter(Boolean).pop() || 'The model file could not be optimized.'),
+        { exitCode: result.code, output: result.json });
     },
     async saveProfile(name, configPath) {
       const listed = await call(['profile', 'list', '--output', 'json'], { timeoutMs: 20_000 });

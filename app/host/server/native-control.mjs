@@ -530,6 +530,53 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
  const pictureFileGone=config=>!config.vision?.mmproj||!existsSync(resolve(repo(),String(config.vision.mmproj)));
  /* The card the picture reader will be chosen for: the cards the model runs on, the one with the most memory (setup's rule is the card's memory: the CPU reader under 24 GB). */
  function pictureCard(config){const make=snapshot.hardware?.engine_vendor,named=Array.isArray(config.gpu)?config.gpu:config.gpu===undefined||config.gpu===null?null:[config.gpu];const cards=(snapshot.hardware?.gpus??[]).filter(g=>g.usable!==false&&(!make||!g.vendor||g.vendor===make)&&(!named||named.includes(g.index)));const best=[...cards].sort((a,b)=>(Number(b.vram_gb)||0)-(Number(a.vram_gb)||0))[0];return best?{vram_gb:Number(best.vram_gb)||0,make:best.vendor??make??null,arch:best.arch??null}:null;}
+ /* ---- Fork: the expert formats of the fast prompt kernels (tools/q36_fast_requant.py, run by Control) ----
+    A Qwen3.6 GGUF whose routed downs are IQ4_XS (Unsloth's UD-IQ3_S: 37 of 40 layers) leaves the engine's fused / int8 prompt kernels for the slow
+    grouped ones on every layer (q36_prompt_path_ok). At the Load the person pressed, the file's header is read; when such downs are there they are
+    rewritten once, keeping every 4-bit code (IQ4_XS -> IQ4_NL, Q4_K -> Q5_K), into <name>-fast.gguf beside it, and the run config names that file.
+    Local only (no network). The source file is kept. Any failure (no room, an error) is a line in the log and the load goes on with the file as it
+    was. A file checked and found already fast is remembered in the run config (fast_checked), so the next load reads nothing. */
+ const FAST_WORDS={check:'Checking the model file…',convert:'Optimizing the model file for faster prompts (once, a few minutes)…',loading:'Loading the model…'};
+ function fastTarget(src){const name=basename(src);const stem=name.replace(/\.gguf$/i,'');return join(dirname(src),(stem.endsWith('-compact')?stem.slice(0,-'-compact'.length):stem)+'-fast.gguf');}
+ function withModelFile(config,from,to){const swap=list=>Array.isArray(list)?list.map(a=>a===from?to:a):list;const next={...config,args:swap(config.args),fast_checked:to};
+  if(Array.isArray(config.args_written))next.args_written=swap(config.args_written);
+  if(config.vision&&config.vision.model===from)next.vision={...config.vision,model:to};
+  return next;}
+ async function ensureFastFormats(job,args,configFile,config){
+  const keep={config};
+  if(!packaged||String(config.arch||'').toLowerCase()!=='qwen35moe'||typeof control.fastRequantCheck!=='function')return keep;
+  if(['0','off','no'].includes(String(process.env.STRATA_FAST_REQUANT??'').toLowerCase()))return keep;
+  const argv=Array.isArray(config.args)?config.args:[];const at=argv.indexOf('--native');const src=at>=0?argv[at+1]:null;
+  if(!src||!/\.gguf$/i.test(src)||!existsSync(src)||config.fast_checked===src)return keep;
+  job.summary=FAST_WORDS.check;job.details=undefined;emit();
+  let checked;try{checked=await control.fastRequantCheck(src);}catch(error){append(args.model,`Model file check: ${error?.message??error}`);return keep;}
+  if(job.state!=='running')return keep;
+  if(checked?.code!==1){
+   if(checked?.code===0){const next={...config,fast_checked:src};try{writeModelConfig(configFile,next);return {config:next};}catch{return keep;}}
+   return keep;}
+  const out=fastTarget(src);
+  if(existsSync(out)){   // an earlier load wrote it: checked again, then used
+   try{const again=await control.fastRequantCheck(out);if(again?.code===0){const next=withModelFile(config,src,out);writeModelConfig(configFile,next);append(args.model,`Model file: using ${basename(out)} (the fast prompt formats)`);return {config:next};}}catch{/* convert again below */}
+  }
+  let size=0;try{size=statSync(src).size;}catch{return keep;}
+  const room=diskSpace(dirname(src));
+  if(room&&room.free<size*1.1+(1<<30)){append(args.model,`Model file: not optimized for faster prompts: ${Math.ceil(size*1.1/1e9)} GB of free space is needed beside it, ${Math.floor(room.free/1e9)} GB is free`);return keep;}
+  job.abort=new AbortController();job.summary=FAST_WORDS.convert;job.details=undefined;emit();
+  try{
+   const got=await control.fastRequant(src,out,{signal:job.abort.signal,onEvent:event=>{if(job.state!=='running'||typeof event?.progress!=='number')return;
+    job.summary=`${FAST_WORDS.convert} ${Math.min(99,Math.floor(event.progress*100))}%`;emit();}});
+   if(job.state!=='running')return keep;
+   const next=withModelFile(config,src,out);writeModelConfig(configFile,next);
+   append(args.model,`Model file: ${got.converted} expert tensors converted for the fast prompt kernels in ${got.seconds} s (${basename(out)}; ${basename(src)} is kept)`+(got.slow?.length?`; layers still on the slow kernels: ${got.slow.join(', ')}`:''));
+   job.summary=FAST_WORDS.loading;job.details=undefined;emit();
+   return {config:next};
+  }catch(error){
+   if(job.state!=='running')return keep;
+   append(args.model,`Model file: not optimized for faster prompts: ${error?.message??error}`);
+   job.summary=FAST_WORDS.loading;job.details=undefined;emit();
+   return keep;
+  }
+ }
  async function ensurePictures(job,args,configFile,config,{strict=false,missing=false}={}){
   const keep={config,args,note:null};
   if(!packaged||args.visionUnavailable===true)return keep;
@@ -618,6 +665,7 @@ return {summary:result.summary??'Deleted',removed:result.plan?.gb??null};}
   if(externalRunning().length)throw new Error('A Strata server is already running outside this UI. Stop it before loading here, or connect its API in Settings → Models.');
   if(args.multiple&&instances.size>=8)throw new Error('Unload an instance before adding another. Up to eight native instances can run here.');
   /* Read pictures is on and the picture files are not here: the Load fetches those files (about 0.9 GB, once) and nothing else of the model, then goes on. No internet: the model loads without pictures and the page says so. */
+  {const got=await ensureFastFormats(job,args,configFile,config);if(job.state!=='running')return;config=got.config;}
   let picturesNote=null;{const got=await ensurePictures(job,args,configFile,config,{missing:entry.picturesMissing===true});if(job.state!=='running')return;config=got.config;args=got.args;picturesNote=got.note;}
   /* One drafter per run (strata_control/drafting.py): switching to the MTP on a model set up for DFlash2 fetches the layer once, here; DFlash2 is fetched below. */
   let drafts=await draftPlan(args,configFile),noSplit=false;

@@ -132,7 +132,8 @@ INSTALLER_TOOLS = ("installer_worker", "iq_pack", "strata_pack", "pack_index", "
 #: them.  setup.py's by-path tools (nvfp4_local_pack, strata_bench, strata_inspect) were missing from the bundle once.
 #: tests/terminal/test_bundle_tools_paths.py reads the by-path references out of the source and fails when one is missing from the bundle.
 INSTALLER_SCRIPTS = ("nvfp4_local_pack", "strata_bench", "strata_inspect",
-                     "q36_mtp_requant")   # Qwen3.6 UD-IQ3_S: setup converts its MTP block after the download
+                     "q36_mtp_requant",   # Qwen3.6 UD-IQ3_S: setup converts its MTP block after the download
+                     "q36_fast_requant")  # fork: the app converts its IQ4_XS downs to IQ4_NL at the first load (fast prompt kernels)
 INSTALLER_DATA = "data"           # draft vocabularies, expert profiles: 2 MB
 #: gguf-py and llama.cpp's HF converter at the llama.cpp pin (third_party/strata-gguf-py, 1.8 MB, MIT): the preparation tools import them, so
 #: no llama.cpp download is needed to prepare a model (before 0.2.15 the installed Terminal fetched the 170 MB zip for this)
