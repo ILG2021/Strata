@@ -29,8 +29,8 @@ class TemplateTests(unittest.TestCase):
     text = TEMPLATE.read_text(encoding="utf-8")
 
     def test_the_default_folder_is_programs_strata_and_the_data_folder_is_never_remembered_as_the_app(self):
-        self.assertIn(r'StrCpy $INSTDIR "$INSTDIR\${PRODUCTNAME}"', self.text)
-        self.assertIn(r'StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0', self.text)
+        self.assertIn(r'StrCpy $INSTDIR "$INSTDIR\${STRATA_DIRNAME}"', self.text)
+        self.assertIn(r'StrCmp $4 "$LOCALAPPDATA\${STRATA_DIRNAME}" restore_done 0', self.text)
         self.assertIn("StrIsUnder", self.text)          # a remembered folder under Temp is ignored too
 
     def test_the_install_folder_page_is_shown_except_in_an_update(self):

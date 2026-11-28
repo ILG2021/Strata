@@ -40,6 +40,9 @@ ${StrLoc}
 
 !define MANUFACTURER "{{manufacturer}}"
 !define PRODUCTNAME "{{product_name}}"
+; Fork (StrataFork rename, 1.0.7): the install folder, the registry keys and the old shortcut names keep the name the app had before,
+; Strata-fork, so an update finds the install (and the data and models inside it) where it is; only what the person reads says StrataFork.
+!define STRATA_DIRNAME "Strata-fork"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
 !define HOMEPAGE "{{homepage}}"
@@ -64,9 +67,9 @@ ${StrLoc}
 !define WEBVIEW2BOOTSTRAPPERPATH "{{webview2_bootstrapper_path}}"
 !define WEBVIEW2INSTALLERPATH "{{webview2_installer_path}}"
 !define MINIMUMWEBVIEW2VERSION "{{minimum_webview2_version}}"
-!define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
+!define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${STRATA_DIRNAME}"
 !define MANUKEY "Software\${MANUFACTURER}"
-!define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
+!define MANUPRODUCTKEY "${MANUKEY}\${STRATA_DIRNAME}"
 !define UNINSTALLERSIGNCOMMAND "{{uninstaller_sign_cmd}}"
 !define ESTIMATEDSIZE "{{estimated_size}}"
 !define STARTMENUFOLDER "{{start_menu_folder}}"
@@ -113,7 +116,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 !if "${INSTALLMODE}" == "both"
   !define MULTIUSER_MUI
-  !define MULTIUSER_INSTALLMODE_INSTDIR "${PRODUCTNAME}"
+  !define MULTIUSER_INSTALLMODE_INSTDIR "${STRATA_DIRNAME}"
   !define MULTIUSER_INSTALLMODE_COMMANDLINE
   !if "${ARCH}" == "x64"
     !define MULTIUSER_USE_PROGRAMFILES64
@@ -546,19 +549,19 @@ Function .onInit
     !if "${INSTALLMODE}" == "perMachine"
       ${If} ${RunningX64}
         !if "${ARCH}" == "x64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES64\${STRATA_DIRNAME}"
         !else if "${ARCH}" == "arm64"
-          StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES64\${STRATA_DIRNAME}"
         !else
-          StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
+          StrCpy $INSTDIR "$PROGRAMFILES\${STRATA_DIRNAME}"
         !endif
       ${Else}
-        StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
+        StrCpy $INSTDIR "$PROGRAMFILES\${STRATA_DIRNAME}"
       ${EndIf}
     !else if "${INSTALLMODE}" == "currentUser"
       ; Everything Strata makes (data, models) lives inside this folder, so it is not a hidden per-user one: <system drive>\<name>.
       ReadEnvStr $INSTDIR SystemDrive
-      StrCpy $INSTDIR "$INSTDIR\${PRODUCTNAME}"
+      StrCpy $INSTDIR "$INSTDIR\${STRATA_DIRNAME}"
     !endif
 
     Call RestorePreviousInstallLocation
@@ -731,7 +734,7 @@ Section Install
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
 
-  !insertmacro StrataMigrateOldInstall "$LOCALAPPDATA\${PRODUCTNAME}" "$INSTDIR"
+  !insertmacro StrataMigrateOldInstall "$LOCALAPPDATA\${STRATA_DIRNAME}" "$INSTDIR"
 
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
@@ -1031,7 +1034,7 @@ Function RestorePreviousInstallLocation
   ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
   StrCmp $4 "" restore_done 0
   ; %LOCALAPPDATA%\Strata holds the user's engines, model configs and tuning: never an app folder
-  StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0
+  StrCmp $4 "$LOCALAPPDATA\${STRATA_DIRNAME}" restore_done 0
   ; Versions up to 1.0.3 were installed under %LOCALAPPDATA%. An update stays where it is; an installer the person opens offers the new place.
   StrCmp $UpdateMode 1 restore_place 0
   StrCmp $PassiveMode 1 restore_place 0
@@ -1080,6 +1083,17 @@ Function un.SkipIfPassive
 FunctionEnd
 
 Function CreateOrUpdateStartMenuShortcut
+  ; StrataFork rename: a shortcut made under the old name takes the new one (same target, so the code below sees it as ours)
+  !if "${STRATA_DIRNAME}" != "${PRODUCTNAME}"
+    ${If} ${FileExists} "$SMPROGRAMS\$AppStartMenuFolder\${STRATA_DIRNAME}.lnk"
+    ${AndIfNot} ${FileExists} "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+      Rename "$SMPROGRAMS\$AppStartMenuFolder\${STRATA_DIRNAME}.lnk" "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+    ${EndIf}
+    ${If} ${FileExists} "$SMPROGRAMS\${STRATA_DIRNAME}.lnk"
+    ${AndIfNot} ${FileExists} "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+      Rename "$SMPROGRAMS\${STRATA_DIRNAME}.lnk" "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    ${EndIf}
+  !endif
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   StrCpy $R0 0
@@ -1122,6 +1136,13 @@ Function CreateOrUpdateStartMenuShortcut
 FunctionEnd
 
 Function CreateOrUpdateDesktopShortcut
+  ; StrataFork rename: the desktop shortcut made under the old name takes the new one
+  !if "${STRATA_DIRNAME}" != "${PRODUCTNAME}"
+    ${If} ${FileExists} "$DESKTOP\${STRATA_DIRNAME}.lnk"
+    ${AndIfNot} ${FileExists} "$DESKTOP\${PRODUCTNAME}.lnk"
+      Rename "$DESKTOP\${STRATA_DIRNAME}.lnk" "$DESKTOP\${PRODUCTNAME}.lnk"
+    ${EndIf}
+  !endif
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\$OldMainBinaryName"

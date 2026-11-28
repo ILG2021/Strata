@@ -1047,7 +1047,7 @@ fn webview_args() -> String {
 fn open_window(app: &tauri::App, port: u16, shell_token: &str) -> Result<(), Box<dyn std::error::Error>> {
     let origin = format!("http://127.0.0.1:{port}");
     let url = origin.parse().expect("a valid loopback URL");
-    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url)).title("Strata-fork").inner_size(1440.0, 920.0).min_inner_size(900.0, 600.0)
+    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url)).title("StrataFork").inner_size(1440.0, 920.0).min_inner_size(900.0, 600.0)
         .devtools(devtools_wanted(std::env::var("STRATA_DEVTOOLS").ok().as_deref()));
     // Dropping pictures on the chat (QA report 1, item 4). Windows: the shell's own file-drop handler is off, because with it on the system hands
     // the dropped file to the shell and the page never sees it; with it off the page gets ordinary drag and drop events (app/host DropZone), as

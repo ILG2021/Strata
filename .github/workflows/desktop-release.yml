@@ -218,7 +218,7 @@ jobs:
           $exe = Get-ChildItem app/desktop/src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
           if (-not $exe -or -not (Test-Path "$($exe.FullName).sig")) { throw 'No signed installer was made.' }
           New-Item -ItemType Directory -Force dist | Out-Null
-          $name = "Strata-fork-$v-windows-x64-nvidia-setup.exe"
+          $name = "StrataFork-$v-windows-x64-nvidia-setup.exe"
           Copy-Item $exe.FullName "dist/$name"
           Copy-Item "$($exe.FullName).sig" "dist/$name.sig"
           python tools/packaging/feed_tool.py set-app-platform --app-json dist/latest.json --target windows-x86_64 --version $v `
@@ -232,7 +232,7 @@ jobs:
       - name: Keep the files (manual runs; the publish job takes them from here for a tag)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: strata-fork-${{ steps.version.outputs.version }}-windows-nvidia
+          name: stratafork-${{ steps.version.outputs.version }}-windows-nvidia
           path: dist/
           retention-days: 7
 
@@ -333,14 +333,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
-          name: strata-fork-${{ needs.windows-nvidia.outputs.version }}-windows-nvidia
+          name: stratafork-${{ needs.windows-nvidia.outputs.version }}-windows-nvidia
           path: dist
 
       - name: Publish the release (tags)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Strata-fork ${{ needs.windows-nvidia.outputs.version }} (Windows, NVIDIA RTX 20 series and newer)
+          name: StrataFork ${{ needs.windows-nvidia.outputs.version }} (Windows, NVIDIA RTX 20 series and newer)
           make_latest: true
           files: dist/*
           body: |

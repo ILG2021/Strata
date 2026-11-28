@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Strata-fork",
+  "productName": "StrataFork",
   "mainBinaryName": "strata-desktop",
   "identifier": "ai.strata-fork.desktop",
   "build": {
@@ -29,7 +29,7 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Local AI, tuned to one model.",
-    "longDescription": "Strata-fork (a privacy-focused fork of Strata: no cloud models, no agent, no tool servers) runs one local model, tuned to your machine. Desktop and Terminal share the same model inventory, profiles and runtime.",
+    "longDescription": "StrataFork (a privacy-focused fork of Strata: no cloud models, no agent, no tool servers) runs one local model, tuned to your machine. Desktop and Terminal share the same model inventory, profiles and runtime.",
     "resources": {
       "../../host/dist": "host/dist",
       "../../host/server": "host/server",
