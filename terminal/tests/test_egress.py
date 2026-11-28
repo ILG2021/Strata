@@ -44,6 +44,70 @@ class Egress(unittest.TestCase):
                 with self.assertRaises(egress.EgressRefused):
                     urllib.request.urlopen(url, timeout=1)
 
+    def test_loopback_names(self):
+        for host in ("127.0.0.1", "127.5.0.1", "::1", "[::1]", "::ffff:127.0.0.1", "localhost", "a.localhost"):
+            self.assertTrue(egress.loopback(host), host)
+        for host in ("0.0.0.0", "10.0.0.1", "::ffff:10.0.0.1", "github.com", "fe80::1%eth0", ""):
+            self.assertFalse(egress.loopback(host), host)
+
+    def test_sockets_reach_this_computer_only_when_local(self):
+        # (fork hardening) a TCP connect outside this computer is refused before any packet leaves; loopback still connects
+        import socket
+        import threading
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        threading.Thread(target=lambda: srv.accept()[0].close(), daemon=True).start()
+        try:
+            for env in ({"STRATA_EGRESS": "offline"}, {**ALLOW, "STRATA_NO_ACQUIRE": "1"}):
+                with mock.patch.dict(os.environ, env):
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s, self.assertRaises(egress.EgressRefused):
+                        s.settimeout(0.5)
+                        s.connect(("192.0.2.1", 443))                      # TEST-NET-1: never routed
+                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s, self.assertRaises(egress.EgressRefused):
+                        s.sendto(b"x", ("192.0.2.1", 9))
+                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                        try:
+                            s.connect(("10.255.255.255", 1))               # the route probe: sends nothing, so it is not refused
+                        except egress.EgressRefused:
+                            self.fail("a UDP connect (no packet) was refused")
+                        except OSError:
+                            pass                                           # no route on this machine: fine, it was not refused
+            with mock.patch.dict(os.environ, {"STRATA_EGRESS": "offline"}):
+                with socket.create_connection(("127.0.0.1", srv.getsockname()[1]), timeout=2):
+                    pass
+        finally:
+            srv.close()
+
+    def test_this_computers_own_interface_address_counts_as_local(self):
+        import socket
+        with mock.patch.object(egress, "_OWN", {"at": 1e18, "addresses": frozenset({"192.168.7.9"})}), \
+                mock.patch.dict(os.environ, {"STRATA_EGRESS": "offline"}):
+            self.assertTrue(egress.own_address("192.168.7.9"))
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                try:
+                    s.connect(("192.168.7.9", 9))
+                except egress.EgressRefused:
+                    self.fail("this computer's own address was refused")
+                except OSError:
+                    pass                                               # nothing listens there: fine, it was not refused
+
+    def test_sockets_are_not_checked_without_a_rule_or_on_a_download_step(self):
+        import socket
+        for env in ({}, ALLOW):
+            with mock.patch.dict(os.environ, env, clear=False):
+                os.environ.pop("STRATA_NO_ACQUIRE", None)
+                if not env:
+                    os.environ.pop("STRATA_EGRESS", None)
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    try:
+                        s.sendto(b"", ("192.0.2.1", 9))
+                    except egress.EgressRefused:
+                        self.fail(f"refused under {env}")
+                    except OSError:
+                        pass
+
     def test_a_redirect_to_another_host_is_refused(self):
         import http.server
         import threading
