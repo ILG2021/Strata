@@ -42,14 +42,14 @@ class VersionBump(unittest.TestCase):
         self.assertIn('STRATA_VERSION="0.1.67-metal"', (ROOT.parent / "engine" / "metal" / "CMakeLists.txt").read_text(encoding="utf-8"))
 
     def test_every_place_the_app_version_lives_says_0_2_3(self):
-        self.assertEqual(first("../app/desktop/src-tauri/Cargo.toml", r'^version = "([^"]+)"'), "1.0.7")
+        self.assertEqual(first("../app/desktop/src-tauri/Cargo.toml", r'^version = "([^"]+)"'), "1.0.8")
         lock = (ROOT.parent / "app" / "desktop" / "src-tauri" / "Cargo.lock").read_text(encoding="utf-8")
-        self.assertRegex(lock, r'name = "strata-desktop"\r?\nversion = "1.0.7"')
-        self.assertEqual(json.loads((ROOT.parent / "app" / "desktop" / "package.json").read_text(encoding="utf-8"))["version"], "1.0.7")
+        self.assertRegex(lock, r'name = "strata-desktop"\r?\nversion = "1.0.8"')
+        self.assertEqual(json.loads((ROOT.parent / "app" / "desktop" / "package.json").read_text(encoding="utf-8"))["version"], "1.0.8")
         host = json.loads((ROOT.parent / "app" / "host" / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(host["version"], "1.0.7")
+        self.assertEqual(host["version"], "1.0.8")
         locked = json.loads((ROOT.parent / "app" / "host" / "package-lock.json").read_text(encoding="utf-8"))
-        self.assertEqual((locked["version"], locked["packages"][""]["version"]), ("1.0.7", "1.0.7"))
+        self.assertEqual((locked["version"], locked["packages"][""]["version"]), ("1.0.8", "1.0.8"))
 
     def test_the_documents_that_state_the_current_version_agree(self):
         self.assertIn("Version 0.2.21, engine 0.1.67.", (ROOT.parent / "AGENTS.md").read_text(encoding="utf-8"))
