@@ -63,8 +63,9 @@ import { appVersionFrom, appVersionToShow } from './app-version.mjs';
 import { createImageModels } from './image-models.mjs';
 import { createRuntimeModels } from './runtime-models.mjs';
 import { createNativeControl } from './native-control.mjs';
+import { connectOpenCode } from './opencode-connect.mjs';
 import { contentSecurityPolicy, foreignApiRequest, hostAllowed } from './request-guard.mjs';
-import { OFFLINE_ON, readOffline, writeOffline } from './network-mode.mjs';
+import { OFFLINE_ON, readOffline } from './network-mode.mjs';
 import { nativeUnloadPlan } from './storage-check.mjs';
 import { installBundledEngine, cleanupAfterInstall } from './bundled-engine.mjs';
 import { systemLocale } from './region.mjs';
@@ -881,6 +882,10 @@ async function api(req, res, path, method, url) {
   /* Expert mode shows what will actually run: the saved tuning's values come with the settings (null when none applies or unreadable). */
   if(nativeSettings&&method==='GET'){const settings=native.settings(nativeSettings[1]);let tuned=null;try{const t=await native.tuneEffective({model:nativeSettings[1],resourceProfile:url.searchParams.get('resourceProfile')||undefined,vision:url.searchParams.get('vision')||undefined});tuned=t.applied?t:null;}catch{tuned=null;}return json(res,200,{...settings,tuned,hints:await native.settingsHints?.(nativeSettings[1])});}
   if(nativeSettings&&method==='PATCH')return json(res,200,native.save(nativeSettings[1],await readBody(req)));
+  // Fork: "Connect OpenCodeFork" writes this model (its API name is the model id) into OpenCodeFork's config; the same model again replaces its entry
+  const nativeOpenCode=/^\/api\/native\/models\/([a-z0-9_.-]+)\/opencode$/.exec(path);
+  if(nativeOpenCode&&method==='POST'){const body=await readBody(req);return json(res,200,connectOpenCode({model:nativeOpenCode[1],name:typeof body?.name==='string'?body.name:undefined,context:body?.context??openCodeContext(nativeOpenCode[1]),baseURL:`http://127.0.0.1:${PORT}/v1`,apiKey:store.get().serving?.apiKey||undefined}));}
+  function openCodeContext(id){try{const saved=Number(native.settings(id)?.values?.context);if(saved>0)return saved;}catch{}return native.state().instances.find(i=>i.model===id||i.apiModelId===id)?.context||undefined;}
   const nativeSettingsFile=/^\/api\/native\/models\/([a-z0-9_.-]+)\/settings-file$/.exec(path);
   if(nativeSettingsFile&&method==='GET')return json(res,200,native.settingsFile(nativeSettingsFile[1]));
   if(nativeSettingsFile&&method==='POST')return json(res,200,await native.openSettingsFile(nativeSettingsFile[1]));
@@ -1039,12 +1044,6 @@ async function api(req, res, path, method, url) {
   }
 
   if (path === '/api/setup' && method === 'GET') return json(res, 200, setupState());
-  if (path === '/api/network-mode' && method === 'GET') return json(res, 200, { offline: readOffline(componentsDirectory()) });
-  if (path === '/api/network-mode' && method === 'PUT') {
-    const body = await readBody(req);
-    if (typeof body.offline !== 'boolean') return error(res, 400, 'Choose on or off.');
-    return json(res, 200, { offline: writeOffline(componentsDirectory(), body.offline) });
-  }
   if (path === '/api/engine/first-run' && method === 'GET') {
     if (readOffline(componentsDirectory())) return json(res, 200, { status: 'offline', gpus: [] });
     if (!control?.updateCheck) return json(res, 200, { status: 'unavailable', gpus: [] });

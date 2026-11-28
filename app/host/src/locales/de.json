@@ -3560,5 +3560,8 @@
   "modelPortActive": "Aktiver Modellport: {0}.",
   "modelPortHint": "Der Startport für lokale Modellserver (Standard 18500). Leer lassen für automatisch; Strata vermeidet Anfragen an Port 8080, um Konflikte mit lokalen Anwendungen wie Spring Boot zu verhindern. Gilt beim nächsten Laden eines Modells.",
   "promptCacheSpreadLabel": "Prompt-Cache-Prüfpunkte verteilen",
-  "promptCacheSpreadHint": "Übergibt --prompt-cache-spread an lokale Modelle, sodass Prüfpunkte über lange Gespräche verteilt bleiben statt sich am Ende zu häufen. Benötigt gleich viel RAM und verkürzt das erneute Einlesen bei der Verdichtung auf Hybridmodellen. Gilt beim nächsten Laden eines Modells."
+  "promptCacheSpreadHint": "Übergibt --prompt-cache-spread an lokale Modelle, sodass Prüfpunkte über lange Gespräche verteilt bleiben statt sich am Ende zu häufen. Benötigt gleich viel RAM und verkürzt das erneute Einlesen bei der Verdichtung auf Hybridmodellen. Gilt beim nächsten Laden eines Modells.",
+  "opencodeConnect": "Mit OpenCodeFork verbinden",
+  "opencodeAdded": "Dieses Modell wurde zu OpenCodeFork hinzugefügt: {0}",
+  "opencodeUpdated": "Dieses Modell wurde in OpenCodeFork aktualisiert: {0}"
 }

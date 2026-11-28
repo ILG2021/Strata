@@ -1,12 +1,12 @@
 // Privacy audit 2026-11-24: who may talk to the host, the page's policy, and offline mode.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { contentSecurityPolicy, foreignApiRequest, hostAllowed } from '../server/request-guard.mjs';
-import { networkModeFile, readOffline, writeOffline } from '../server/network-mode.mjs';
+import { readOffline } from '../server/network-mode.mjs';
 import { controlEnvironment, runCli } from '../server/control-runtime.mjs';
 
 test('a name pointed at this computer is not this host; addresses and localhost are', () => {
@@ -30,18 +30,14 @@ test('the policy runs only the inline script of the built page and loads from th
   assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline|unsafe-eval'(?<!wasm-unsafe-eval')|https:|\*/);
 });
 
-test('offline mode: off without a file, on when the file is damaged, and it stops every download step', async () => {
+test('offline mode is retired: a file an older version wrote is ignored, and every download step keeps the download allowlist', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'strata-offline-')), components = join(dir, 'components');
   try {
+    mkdirSync(components, { recursive: true });
+    writeFileSync(join(dir, 'network-mode.json'), JSON.stringify({ offline: true }));
     assert.equal(readOffline(components), false);
-    writeOffline(components, true);
-    assert.equal(readOffline(components), true);
-    assert.equal(controlEnvironment({}, { env: {}, components, acquire: true }).STRATA_EGRESS, 'offline');
-    await assert.rejects(runCli({ python: 'x', cli: 'y' }, ['update'], { components, acquire: true, spawnProcess: () => { throw new Error('must not start'); } }), { code: 'offline_mode' });
-    writeOffline(components, false);
-    assert.equal(controlEnvironment({}, { env: {}, components }).STRATA_EGRESS, 'allowlist');
-    writeFileSync(networkModeFile(components), '{');
-    assert.equal(readOffline(components), true);
+    assert.equal(controlEnvironment({}, { env: {}, components, acquire: true }).STRATA_EGRESS, 'allowlist');
+    assert.equal(controlEnvironment({}, { env: {}, components }).STRATA_NO_ACQUIRE, '1', 'starting and serving still never download');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
